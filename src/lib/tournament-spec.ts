@@ -136,12 +136,7 @@ export function isWin(kind: TournamentKind, correct: number): boolean {
 }
 
 export type LockReason =
-  | "open"
-  | "won_this_week"
-  | "played_today"
-  | "played_this_week"
-  | "no_coins"
-  | "no_ticket";
+  "open" | "won_this_week" | "played_today" | "played_this_week" | "no_coins" | "no_ticket";
 
 /* ------------------------------------------------------------------ */
 /* Ranking titles (God Tournament)                                     */
@@ -283,7 +278,9 @@ export const STRINGS: Record<TournamentLanguage, Strings> = {
 };
 
 export function stringsFor(language: string): Strings {
-  return STRINGS[(language as TournamentLanguage) in STRINGS ? (language as TournamentLanguage) : "english"];
+  return STRINGS[
+    (language as TournamentLanguage) in STRINGS ? (language as TournamentLanguage) : "english"
+  ];
 }
 
 /* ------------------------------------------------------------------ */

@@ -7,7 +7,15 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["dist", ".output", ".vinxi", "src/lib/pdf-font-data.base64.ts"],
+    ignores: [
+      "dist",
+      ".output",
+      ".vinxi",
+      // Generated artefacts: not hand-written source, so they are not linted
+      // (same treatment the repo already gives the generated font data file).
+      "src/lib/pdf-font-data.base64.ts",
+      "src/integrations/supabase/types.ts",
+    ],
   },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],

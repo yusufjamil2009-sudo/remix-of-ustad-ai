@@ -15,9 +15,9 @@ import {
   ShoppingCart,
   Search,
   Crown,
-
 } from "lucide-react";
 import { useGuest, shortId } from "@/lib/ustad-client";
+import { IdentityScreen, SecureDeviceNotice } from "@/components/IdentityScreen";
 import { ThemeSwitch } from "@/components/ThemeSwitch";
 import { UstadLogo } from "@/components/UstadLogo";
 import { NotificationCenter } from "@/components/NotificationCenter";
@@ -41,8 +41,40 @@ const NAV = [
 ] as const;
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { session } = useGuest();
+  const { session, status, ready, hasAccount } = useGuest();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+
+  /*
+   * THE IDENTITY GATE.
+   *
+   * Nothing inside the app renders without a server-verified session, so no
+   * page or component can ever run on a half-established identity (and none of
+   * them can silently create one). Cases:
+   *   • initializing / recovering   → quiet splash, no Home flash
+   *   • no identity / invalid token → Welcome (New Guest ID · Backup ID)
+   *   • authenticated               → straight to Home, every open, forever
+   *     (until an explicit Log Out or Clear Data)
+   *
+   * A guest that already existed before this feature already HAS a valid
+   * identity, so it is never blocked: it goes straight Home and is only
+   * OFFERED credentials with a dismissible notice.
+   */
+  if (!ready || !session) {
+    if (status === "idle" || status === "initializing" || status === "recovering") {
+      return (
+        <div
+          className="flex min-h-[100dvh] w-full items-center justify-center bg-background"
+          role="status"
+          aria-live="polite"
+        >
+          <span className="flex size-14 animate-pulse items-center justify-center rounded-2xl bg-card ring-1 ring-border">
+            <UstadLogo className="size-10" priority />
+          </span>
+        </div>
+      );
+    }
+    return <IdentityScreen />;
+  }
 
   return (
     <div className="flex min-h-[100dvh] w-full flex-col md:flex-row">
@@ -115,7 +147,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <main className="flex min-h-0 w-full min-w-0 flex-1 flex-col">{children}</main>
+      <main className="flex min-h-0 w-full min-w-0 flex-1 flex-col">
+        {hasAccount ? null : <SecureDeviceNotice />}
+        {children}
+      </main>
     </div>
   );
 }

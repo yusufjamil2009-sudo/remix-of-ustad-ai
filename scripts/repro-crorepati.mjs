@@ -80,7 +80,10 @@ for (let q = 1; q <= 20; q++) {
     const opts = page.locator("button[aria-label^='Option ']");
     const n = await opts.count();
     if (n >= 4) {
-      const enabled = await opts.first().isEnabled().catch(() => false);
+      const enabled = await opts
+        .first()
+        .isEnabled()
+        .catch(() => false);
       if (enabled) {
         ready = true;
         break;
@@ -140,7 +143,10 @@ for (let q = 1; q <= 20; q++) {
   }
 
   const st = (
-    await sql(`select status, current_question, cleared_questions from crorepati_attempts where guest_id=$1 order by started_at desc limit 1`, [guest])
+    await sql(
+      `select status, current_question, cleared_questions from crorepati_attempts where guest_id=$1 order by started_at desc limit 1`,
+      [guest],
+    )
   )[0];
   if (st?.status !== "active") {
     console.log(`game ended after Q${q}: status=${st?.status} cleared=${st?.cleared_questions}`);
@@ -149,7 +155,10 @@ for (let q = 1; q <= 20; q++) {
 }
 
 const final = (
-  await sql(`select status, cleared_questions, coin_reward, result from crorepati_attempts where guest_id=$1 order by started_at desc limit 1`, [guest])
+  await sql(
+    `select status, cleared_questions, coin_reward, result from crorepati_attempts where guest_id=$1 order by started_at desc limit 1`,
+    [guest],
+  )
 )[0];
 
 console.log("\n================ SUMMARY ================");

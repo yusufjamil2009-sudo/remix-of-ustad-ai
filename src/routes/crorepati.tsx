@@ -638,7 +638,6 @@ function Leaderboard({ rows }: { rows: CrorepatiLeaderboardRow[] }) {
   );
 }
 
-
 /**
  * Free-entry / paid-entry summary. Everything shown here comes from the
  * authoritative server state — this component never computes a balance.
@@ -790,7 +789,6 @@ function ResultPanel({
           Today's game is done — one game per event day.
         </p>
       ) : null}
-
     </div>
   );
 }

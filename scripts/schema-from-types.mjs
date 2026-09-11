@@ -66,7 +66,9 @@ for (const { name, rows } of tables) {
 // The Part 1–6 migrations reference these as foreign keys / conflict targets.
 out.push(`alter table public.profiles add constraint profiles_guest_uniq unique (guest_id);`);
 out.push(`alter table public.settings add constraint settings_guest_uniq unique (guest_id);`);
-out.push(`alter table public.api_configs add constraint api_configs_guest_provider_uniq unique (guest_id, provider);`);
+out.push(
+  `alter table public.api_configs add constraint api_configs_guest_provider_uniq unique (guest_id, provider);`,
+);
 
 fs.writeFileSync("/tmp/baseline.sql", out.join("\n\n") + "\n");
 console.log(`wrote ${tables.length} baseline tables to /tmp/baseline.sql`);

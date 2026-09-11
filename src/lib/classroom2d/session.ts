@@ -140,7 +140,17 @@ export function latestStorageKey(guestId: string): string {
   return `${LATEST_PREFIX}${guestId}`;
 }
 
-/** Guest identity for classroom persistence — never from a request body. */
+/**
+ * Guest identity for classroom persistence — never from a request body.
+ *
+ * INVARIANT (audited with the permanent-identity change): `ustad.guest.id` has
+ * exactly ONE writer, the central identity store in `ustad-client.ts`, which
+ * writes it only for the currently authenticated guest and removes it on LOG
+ * OUT / CLEAR DATA. It is therefore never an authority — the server still
+ * derives ownership from the verified session — and when it is absent (fresh
+ * device, cleared data) snapshots are simply not restored instead of being
+ * attributed to the wrong guest. No feature may write this key directly.
+ */
 export function classroomGuestId(): string {
   const s = store();
   if (!s) return "";

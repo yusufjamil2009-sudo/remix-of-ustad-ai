@@ -67,7 +67,10 @@ await applyCoins({
 const OPT = "button[aria-label^='Option ']";
 await page.goto(`${BASE}/crorepati`, { waitUntil: "domcontentloaded", timeout: 90000 });
 await page.waitForTimeout(3000);
-await page.getByRole("button", { name: /start crorepati/i }).first().click();
+await page
+  .getByRole("button", { name: /start crorepati/i })
+  .first()
+  .click();
 console.log("starting…");
 // Wait only for the question to render, NOT for the answer window to open.
 await page.locator(OPT).first().waitFor({ timeout: 120000 });
@@ -94,9 +97,21 @@ for (let q = 1; q <= 20; q++) {
   // enabled a click is a normal answer, not a race.
   if (q % 4 === 1) {
     const opts = page.locator(OPT);
-    if ((await opts.count()) && !(await opts.first().isEnabled().catch(() => true))) {
-      await opts.first().click({ force: true, timeout: 5000 }).catch(() => {});
-      await opts.nth(1).click({ force: true, timeout: 5000 }).catch(() => {});
+    if (
+      (await opts.count()) &&
+      !(await opts
+        .first()
+        .isEnabled()
+        .catch(() => true))
+    ) {
+      await opts
+        .first()
+        .click({ force: true, timeout: 5000 })
+        .catch(() => {});
+      await opts
+        .nth(1)
+        .click({ force: true, timeout: 5000 })
+        .catch(() => {});
       const early = (
         await sql(
           `select status from crorepati_attempts where guest_id=$1 order by started_at desc limit 1`,
@@ -113,7 +128,13 @@ for (let q = 1; q <= 20; q++) {
   let ready = false;
   for (let w = 0; w < 30; w++) {
     const opts = page.locator(OPT);
-    if ((await opts.count()) >= 4 && (await opts.first().isEnabled().catch(() => false))) {
+    if (
+      (await opts.count()) >= 4 &&
+      (await opts
+        .first()
+        .isEnabled()
+        .catch(() => false))
+    ) {
       ready = true;
       break;
     }
@@ -141,16 +162,28 @@ for (let q = 1; q <= 20; q++) {
   // ---- ABUSE 2: hammer the same option (double / triple click) ----
   if (q % 3 === 0) {
     await Promise.all([
-      opts.nth(correct).click({ timeout: 8000 }).catch(() => {}),
-      opts.nth(correct).click({ force: true, timeout: 8000 }).catch(() => {}),
-      opts.nth(correct).click({ force: true, timeout: 8000 }).catch(() => {}),
+      opts
+        .nth(correct)
+        .click({ timeout: 8000 })
+        .catch(() => {}),
+      opts
+        .nth(correct)
+        .click({ force: true, timeout: 8000 })
+        .catch(() => {}),
+      opts
+        .nth(correct)
+        .click({ force: true, timeout: 8000 })
+        .catch(() => {}),
     ]);
   } else {
     await opts.nth(correct).click({ timeout: 8000 });
     // ---- ABUSE 3: click a DIFFERENT option right after answering ----
     if (q % 3 === 1) {
       await page.waitForTimeout(150);
-      await opts.nth((correct + 1) % 4).click({ force: true, timeout: 5000 }).catch(() => {});
+      await opts
+        .nth((correct + 1) % 4)
+        .click({ force: true, timeout: 5000 })
+        .catch(() => {});
     }
   }
 

@@ -349,7 +349,6 @@ async function enforceTimeout(attempt: Row, event: Row): Promise<Row> {
   });
 }
 
-
 async function loadAttempt(guestId: string, attemptId: string): Promise<Row> {
   const { data } = await sdb()
     .from("crorepati_attempts")

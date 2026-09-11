@@ -75,7 +75,10 @@ function str(v: unknown, max = 2000): string {
 
 function list(v: unknown, max: number): string[] {
   if (!Array.isArray(v)) return [];
-  return v.map((x) => str(x, 300)).filter(Boolean).slice(0, max);
+  return v
+    .map((x) => str(x, 300))
+    .filter(Boolean)
+    .slice(0, max);
 }
 
 function clean(kind: TournamentKind, rows: Raw[], seen: Set<string>): TournamentItem[] {
@@ -103,12 +106,20 @@ function clean(kind: TournamentKind, rows: Raw[], seen: Set<string>): Tournament
     const clues = list(r["clues"], 5);
     if (kind === "mystery" && clues.length < 4) continue;
 
-    const key = prompt.toLowerCase().replace(/[^a-z0-9\u0900-\u097F]+/g, " ").trim().slice(0, 120); // eslint-disable-line no-misleading-character-class
+    const key = prompt
+      .toLowerCase()
+      // The ऀ-ॿ range is the explicit Devanagari block kept for Hindi
+      // question text; the escapes make the range unambiguous (false positive).
+      // eslint-disable-next-line no-misleading-character-class
+      .replace(/[^a-z0-9\u0900-\u097F]+/g, " ")
+      .trim()
+      .slice(0, 120);
     if (seen.has(key)) continue;
     seen.add(key);
 
     out.push({
-      caseTitle: str(r["caseTitle"] ?? r["title"], 120) || (kind === "mystery" ? "Case file" : "Challenge"),
+      caseTitle:
+        str(r["caseTitle"] ?? r["title"], 120) || (kind === "mystery" ? "Case file" : "Challenge"),
       story: str(r["story"] ?? r["scenario"], 1600),
       suspects,
       clues,
@@ -119,7 +130,9 @@ function clean(kind: TournamentKind, rows: Raw[], seen: Set<string>): Tournament
       explanation: str(r["explanation"], 900),
       solution: str(r["solution"] ?? r["explanation"], 1600),
       category: str(r["category"], 60) || (kind === "mystery" ? "Mystery" : "Reasoning"),
-      difficulty: ["easy", "medium", "hard", "very hard"].includes(str(r["difficulty"], 20).toLowerCase())
+      difficulty: ["easy", "medium", "hard", "very hard"].includes(
+        str(r["difficulty"], 20).toLowerCase(),
+      )
         ? str(r["difficulty"], 20).toLowerCase()
         : kind === "god"
           ? "very hard"
@@ -239,7 +252,15 @@ export async function generateTournamentSet(input: {
   ].join(" ");
 
   const seen = new Set(
-    input.avoid.map((a) => a.toLowerCase().replace(/[^a-z0-9\u0900-\u097F]+/g, " ").trim().slice(0, 120)), // eslint-disable-line no-misleading-character-class
+    input.avoid.map((a) =>
+      a
+        .toLowerCase()
+        // Intentional Devanagari block range (see the identical key builder above).
+        // eslint-disable-next-line no-misleading-character-class
+        .replace(/[^a-z0-9\u0900-\u097F]+/g, " ")
+        .trim()
+        .slice(0, 120),
+    ),
   );
   const collected: TournamentItem[] = [];
   let provider = "";
@@ -259,7 +280,9 @@ export async function generateTournamentSet(input: {
       mystery
         ? "Every case must be solvable ONLY by reading the clues — no outside knowledge, no guessing."
         : "Every question must be solvable by pure reasoning with a single defensible answer; make them genuinely hard but fair.",
-      mystery ? "Every case has EXACTLY 4 suspects and 4 or 5 clues, plus a short timeline where it helps." : "",
+      mystery
+        ? "Every case has EXACTLY 4 suspects and 4 or 5 clues, plus a short timeline where it helps."
+        : "",
       "Every item has EXACTLY 4 options and EXACTLY ONE correct option.",
       'Include "correctIndex" (0-based) and a detailed "solution" that explains the reasoning step by step.',
       `Rotate across these themes so the set feels varied: ${themes.slice(0, 6).join(", ")}.`,

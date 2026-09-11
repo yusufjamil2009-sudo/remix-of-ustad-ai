@@ -302,21 +302,29 @@ export async function inventBlueprint(index: number): Promise<EventBlueprint> {
     });
 
     const raw = parseJsonLoose<Record<string, unknown>>(res.text);
-    const name = String(raw["name"] ?? "").trim().slice(0, 80);
+    const name = String(raw["name"] ?? "")
+      .trim()
+      .slice(0, 80);
     if (!name) return fallback;
     const questionCount = clampInt(raw["questionCount"], 5, 30, fallback.questionCount);
     const difficultyRaw = String(raw["difficulty"] ?? "").toLowerCase();
-    const difficulty = (["easy", "medium", "hard", "mixed"].includes(difficultyRaw)
-      ? difficultyRaw
-      : fallback.difficulty) as EventBlueprint["difficulty"];
+    const difficulty = (
+      ["easy", "medium", "hard", "mixed"].includes(difficultyRaw)
+        ? difficultyRaw
+        : fallback.difficulty
+    ) as EventBlueprint["difficulty"];
 
     return {
       slug: `${slugify(name, fallback.slug)}-${index + 1}`,
       name,
       description:
-        String(raw["description"] ?? fallback.description).trim().slice(0, 240) ||
-        fallback.description,
-      category: String(raw["category"] ?? fallback.category).trim().slice(0, 60) || fallback.category,
+        String(raw["description"] ?? fallback.description)
+          .trim()
+          .slice(0, 240) || fallback.description,
+      category:
+        String(raw["category"] ?? fallback.category)
+          .trim()
+          .slice(0, 60) || fallback.category,
       difficulty,
       questionCount,
       preTimerSeconds: clampInt(raw["preTimerSeconds"], 5, 20, fallback.preTimerSeconds),
@@ -527,7 +535,9 @@ export async function runEventAutopilotTick(now: Date = new Date()): Promise<Aut
   // 4. Announce the next event ~3.5 days early so reminders can go out.
   if (current && !upcoming) {
     const cfg = (current["gameplay_config"] ?? {}) as Row;
-    const plannedIso = cfg["nextStartAt"] ? String(cfg["nextStartAt"]) : String(current["end_time"]);
+    const plannedIso = cfg["nextStartAt"]
+      ? String(cfg["nextStartAt"])
+      : String(current["end_time"]);
     let plannedMs = Date.parse(plannedIso);
     if (!Number.isFinite(plannedMs)) plannedMs = nowMs + 7 * DAY;
     // If the current event already ended (it stayed live until now), start the
@@ -547,13 +557,15 @@ export async function runEventAutopilotTick(now: Date = new Date()): Promise<Aut
   const live =
     fresh
       .filter((e) => e["start_time"] && Date.parse(String(e["start_time"])) <= nowMs)
-      .sort((a, b) => Date.parse(String(b["start_time"])) - Date.parse(String(a["start_time"])))[0] ??
-    null;
+      .sort(
+        (a, b) => Date.parse(String(b["start_time"])) - Date.parse(String(a["start_time"])),
+      )[0] ?? null;
   const next =
     fresh
       .filter((e) => e["start_time"] && Date.parse(String(e["start_time"])) > nowMs)
-      .sort((a, b) => Date.parse(String(a["start_time"])) - Date.parse(String(b["start_time"])))[0] ??
-    null;
+      .sort(
+        (a, b) => Date.parse(String(a["start_time"])) - Date.parse(String(b["start_time"])),
+      )[0] ?? null;
   report.live = live ? String(live["code"]) : null;
   report.upcoming = next ? String(next["code"]) : null;
   return report;

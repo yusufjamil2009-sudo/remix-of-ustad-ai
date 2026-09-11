@@ -17,7 +17,9 @@ export const tournamentStartFn = createServerFn({ method: "POST" })
   .handler(async ({ data: d }) => engine.startTournament({ token: d.token, kind: kindOf(d.kind) }));
 
 export const tournamentAnswerFn = createServerFn({ method: "POST" })
-  .inputValidator((d: { token: string; attemptId: string; position: number; optionIndex: number }) => d)
+  .inputValidator(
+    (d: { token: string; attemptId: string; position: number; optionIndex: number }) => d,
+  )
   .handler(async ({ data: d }) =>
     engine.answerTournament({
       token: d.token,

@@ -39,4 +39,6 @@ const Toggle = React.forwardRef<
 
 Toggle.displayName = TogglePrimitive.Root.displayName;
 
+// toggleVariants is the shared cva config consumed app-wide (standard shadcn pattern).
+// eslint-disable-next-line react-refresh/only-export-components
 export { Toggle, toggleVariants };

@@ -54,7 +54,10 @@ try {
 check("S-01c", "a malformed token is rejected", malformedRejected);
 
 /* S-02 — no cross-guest data access. */
-const vAttempts = await sql("select id from crorepati_attempts where guest_id=$1 order by started_at desc limit 1", [V.guestId]);
+const vAttempts = await sql(
+  "select id from crorepati_attempts where guest_id=$1 order by started_at desc limit 1",
+  [V.guestId],
+);
 if (vAttempts.length === 0) {
   // Give the victim a real attempt to try to steal.
   try {
@@ -63,17 +66,34 @@ if (vAttempts.length === 0) {
     console.log("   victim start:", String(e).slice(0, 120));
   }
 }
-const victimAttempt = (await sql("select id from crorepati_attempts where guest_id=$1 order by started_at desc limit 1", [V.guestId]))[0];
+const victimAttempt = (
+  await sql(
+    "select id from crorepati_attempts where guest_id=$1 order by started_at desc limit 1",
+    [V.guestId],
+  )
+)[0];
 if (victimAttempt) {
   let stolen = null;
   let denied = false;
   try {
-    stolen = await crore.submitAnswer({ token: X.token, attemptId: victimAttempt.id, questionNumber: 1, optionIndex: 0 });
+    stolen = await crore.submitAnswer({
+      token: X.token,
+      attemptId: victimAttempt.id,
+      questionNumber: 1,
+      optionIndex: 0,
+    });
   } catch {
     denied = true;
   }
-  check("S-02", "one guest cannot act on another guest's attempt", denied || !stolen, denied ? "denied" : "no data returned");
-  const owner = (await sql("select guest_id from crorepati_attempts where id=$1", [victimAttempt.id]))[0];
+  check(
+    "S-02",
+    "one guest cannot act on another guest's attempt",
+    denied || !stolen,
+    denied ? "denied" : "no data returned",
+  );
+  const owner = (
+    await sql("select guest_id from crorepati_attempts where id=$1", [victimAttempt.id])
+  )[0];
   check("S-02b", "ownership never transfers", owner.guest_id === V.guestId);
 } else {
   check("S-02", "cross-guest attempt access", "BLOCKED", "no victim attempt available");
@@ -81,7 +101,13 @@ if (victimAttempt) {
 }
 
 /* S-03 — the client cannot supply its own reward amount. */
-const balBefore = Number((await sql("select coalesce(sum(coins),0) s from ustad_coin_ledger where guest_id=$1", [X.guestId]))[0].s);
+const balBefore = Number(
+  (
+    await sql("select coalesce(sum(coins),0) s from ustad_coin_ledger where guest_id=$1", [
+      X.guestId,
+    ])
+  )[0].s,
+);
 let injected = false;
 for (const fn of ["claimReward", "grantCoins", "addCoins", "award"]) {
   if (typeof crore[fn] === "function") {
@@ -93,9 +119,24 @@ for (const fn of ["claimReward", "grantCoins", "addCoins", "award"]) {
     }
   }
 }
-const balAfter = Number((await sql("select coalesce(sum(coins),0) s from ustad_coin_ledger where guest_id=$1", [X.guestId]))[0].s);
-check("S-03", "the client cannot inject a coin amount", !injected && balAfter === balBefore, `${balBefore} → ${balAfter}`);
-check("S-03b", "no client-callable coin-granting export exists", !["claimReward", "grantCoins", "addCoins", "award"].some((f) => typeof crore[f] === "function"));
+const balAfter = Number(
+  (
+    await sql("select coalesce(sum(coins),0) s from ustad_coin_ledger where guest_id=$1", [
+      X.guestId,
+    ])
+  )[0].s,
+);
+check(
+  "S-03",
+  "the client cannot inject a coin amount",
+  !injected && balAfter === balBefore,
+  `${balBefore} → ${balAfter}`,
+);
+check(
+  "S-03b",
+  "no client-callable coin-granting export exists",
+  !["claimReward", "grantCoins", "addCoins", "award"].some((f) => typeof crore[f] === "function"),
+);
 
 /* S-04 — the browser cannot write to protected tables (RLS). */
 const probe = async (table, payload) =>
@@ -114,24 +155,49 @@ const probe = async (table, payload) =>
     },
     [table, payload],
   );
-const ledgerStatus = await probe("ustad_coin_ledger", { guest_id: V.guestId, source: "hack", ref_id: "x", coins: 1e9 });
-check("S-04", "the browser cannot insert into the coin ledger", ledgerStatus !== 201, `HTTP ${ledgerStatus}`);
-const achStatus = await probe("ustad_achievements", { guest_id: V.guestId, type: "ultra_grandmaster" });
+const ledgerStatus = await probe("ustad_coin_ledger", {
+  guest_id: V.guestId,
+  source: "hack",
+  ref_id: "x",
+  coins: 1e9,
+});
+check(
+  "S-04",
+  "the browser cannot insert into the coin ledger",
+  ledgerStatus !== 201,
+  `HTTP ${ledgerStatus}`,
+);
+const achStatus = await probe("ustad_achievements", {
+  guest_id: V.guestId,
+  type: "ultra_grandmaster",
+});
 check("S-04b", "the browser cannot insert an achievement", achStatus !== 201, `HTTP ${achStatus}`);
-const certStatus = await probe("ustad_certificates", { guest_id: V.guestId, certificate_id: "USTAD-CERT-HACKED0" });
+const certStatus = await probe("ustad_certificates", {
+  guest_id: V.guestId,
+  certificate_id: "USTAD-CERT-HACKED0",
+});
 check("S-04c", "the browser cannot forge a certificate", certStatus !== 201, `HTTP ${certStatus}`);
 const hackRows = await sql("select 1 from ustad_coin_ledger where source='hack'");
 check("S-04d", "no injected row reached the database", hackRows.length === 0);
 
 /* S-05 — no client-callable trophy award. */
-check("S-05", "the trophy engine exposes no client-callable award function", typeof trophy.awardAchievement !== "function" || !("awardAchievement" in (await import("../src/lib/trophy.functions.ts").catch(() => ({})))));
+check(
+  "S-05",
+  "the trophy engine exposes no client-callable award function",
+  typeof trophy.awardAchievement !== "function" ||
+    !("awardAchievement" in (await import("../src/lib/trophy.functions.ts").catch(() => ({})))),
+);
 
 /* S-06 — anti-cheat rejects impossible answer speed. */
 let fresh = null;
 try {
   fresh = await masterEv.startAttempt({
     token: X.token,
-    eventCode: (await sql("select code from master_events where status='open' order by created_at desc limit 1"))[0]?.code,
+    eventCode: (
+      await sql(
+        "select code from master_events where status='open' order by created_at desc limit 1",
+      )
+    )[0]?.code,
   });
 } catch (e) {
   console.log("   anti-cheat setup:", String(e).slice(0, 140));
@@ -139,14 +205,33 @@ try {
 if (fresh) {
   let tooFast = false;
   try {
-    const r = await masterEv.submitAnswer({ token: X.token, attemptId: fresh.attemptId, questionNumber: 1, optionIndex: 0 });
+    const r = await masterEv.submitAnswer({
+      token: X.token,
+      attemptId: fresh.attemptId,
+      questionNumber: 1,
+      optionIndex: 0,
+    });
     tooFast = r?.rejected !== true;
   } catch {
     tooFast = false;
   }
-  check("S-06", "an impossibly fast answer is not silently accepted as correct", true, tooFast ? "accepted but scored server-side" : "rejected");
-  const st = (await sql("select correct_count, score from master_event_attempts where id=$1", [fresh.attemptId]))[0];
-  check("S-06b", "the score stays server-computed and bounded", Number(st.correct_count) <= 1, `${st.correct_count} correct`);
+  check(
+    "S-06",
+    "an impossibly fast answer is not silently accepted as correct",
+    true,
+    tooFast ? "accepted but scored server-side" : "rejected",
+  );
+  const st = (
+    await sql("select correct_count, score from master_event_attempts where id=$1", [
+      fresh.attemptId,
+    ])
+  )[0];
+  check(
+    "S-06b",
+    "the score stays server-computed and bounded",
+    Number(st.correct_count) <= 1,
+    `${st.correct_count} correct`,
+  );
 } else {
   check("S-06", "anti-cheat speed rule", "BLOCKED", "no open event");
   check("S-06b", "server-computed score", "BLOCKED", "no open event");
@@ -157,20 +242,40 @@ const dupLedger = await sql(
   `select guest_id, source, ref_id, count(*) c from ustad_coin_ledger
    group by guest_id, source, ref_id having count(*) > 1`,
 );
-check("S-07", "the coin ledger contains no duplicate (guest, source, ref) rows", dupLedger.length === 0, `${dupLedger.length} duplicates`);
+check(
+  "S-07",
+  "the coin ledger contains no duplicate (guest, source, ref) rows",
+  dupLedger.length === 0,
+  `${dupLedger.length} duplicates`,
+);
 
 /* S-08 — certificates are unique and unforgeable. */
-const dupCert = await sql("select certificate_id, count(*) c from ustad_certificates group by certificate_id having count(*) > 1");
+const dupCert = await sql(
+  "select certificate_id, count(*) c from ustad_certificates group by certificate_id having count(*) > 1",
+);
 check("S-08", "no duplicate certificate ids exist", dupCert.length === 0);
 const tokenLens = await sql("select distinct length(verification_token) l from ustad_certificates");
-check("S-08b", "every verification token is a full 64-hex secret", tokenLens.every((r) => Number(r.l) === 64), JSON.stringify(tokenLens.map((r) => r.l)));
-const bad = await V.page.goto(`${BASE}/verify/certificate/${"f".repeat(64)}`, { waitUntil: "domcontentloaded", timeout: 90000 });
+check(
+  "S-08b",
+  "every verification token is a full 64-hex secret",
+  tokenLens.every((r) => Number(r.l) === 64),
+  JSON.stringify(tokenLens.map((r) => r.l)),
+);
+const bad = await V.page.goto(`${BASE}/verify/certificate/${"f".repeat(64)}`, {
+  waitUntil: "domcontentloaded",
+  timeout: 90000,
+});
 // Verification resolves on the client; wait for the verdict, not the shell.
 await V.page
   .waitForFunction(() => !/Verifying/i.test(document.body.innerText), { timeout: 30000 })
   .catch(() => {});
 const badBody = await V.page.textContent("body");
-check("S-08c", "an unknown token verifies as invalid without leaking data", /not found|invalid/i.test(badBody) && !/guest_[a-f0-9]{16}/.test(badBody), `HTTP ${bad.status()}`);
+check(
+  "S-08c",
+  "an unknown token verifies as invalid without leaking data",
+  /not found|invalid/i.test(badBody) && !/guest_[a-f0-9]{16}/.test(badBody),
+  `HTTP ${bad.status()}`,
+);
 
 /* S-09 — achievements cannot be duplicated. */
 const dupAch = await sql(
@@ -184,7 +289,10 @@ let opDenied = 0;
 for (const [fn, args] of [
   ["createEvent", { token: X.token, name: "Hack Event", type: "dynamic", questionCount: 5 }],
   ["transitionEvent", { token: X.token, eventCode: "science-championship", to: "open" }],
-  ["updateEventConfig", { token: X.token, eventCode: "science-championship", patch: { questionCount: 1 } }],
+  [
+    "updateEventConfig",
+    { token: X.token, eventCode: "science-championship", patch: { questionCount: 1 } },
+  ],
 ]) {
   try {
     await masterEv[fn](args);
@@ -192,7 +300,12 @@ for (const [fn, args] of [
     opDenied++;
   }
 }
-check("S-10", "a normal guest cannot perform operator actions", opDenied === 3, `${opDenied}/3 denied`);
+check(
+  "S-10",
+  "a normal guest cannot perform operator actions",
+  opDenied === 3,
+  `${opDenied}/3 denied`,
+);
 
 /* S-11 — SQL-injection-shaped input is handled safely. */
 let injOk = true;
@@ -202,13 +315,28 @@ try {
   /* a rejection is fine */
 }
 const tableStillThere = await sql("select count(*) c from master_events");
-check("S-11", "injection-shaped input cannot damage the schema", Number(tableStillThere[0].c) > 0 && injOk, `${tableStillThere[0].c} events intact`);
+check(
+  "S-11",
+  "injection-shaped input cannot damage the schema",
+  Number(tableStillThere[0].c) > 0 && injOk,
+  `${tableStillThere[0].c} events intact`,
+);
 
 /* S-12 — audit trail exists for authoritative actions. */
 const audit = await sql("select count(*) c from master_event_audit");
-check("S-12", "authoritative event actions are audit-logged", Number(audit[0].c) > 0, `${audit[0].c} entries`);
+check(
+  "S-12",
+  "authoritative event actions are audit-logged",
+  Number(audit[0].c) > 0,
+  `${audit[0].c} entries`,
+);
 const auditWritable = await probe("master_event_audit", { action: "forged" });
-check("S-12b", "the audit log is not writable from the browser", auditWritable !== 201, `HTTP ${auditWritable}`);
+check(
+  "S-12b",
+  "the audit log is not writable from the browser",
+  auditWritable !== 201,
+  `HTTP ${auditWritable}`,
+);
 
 summary();
 await browser.close();

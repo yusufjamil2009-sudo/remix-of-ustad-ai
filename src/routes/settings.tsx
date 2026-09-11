@@ -13,8 +13,18 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PROVIDERS, CATEGORIES, STATUS_LABELS } from "@/lib/providers";
-import { useGuest, shortId } from "@/lib/ustad-client";
+import {
+  useGuest,
+  shortId,
+  clearLocalCache,
+  clearLocalData,
+  logoutIdentity,
+  readStoredUsername,
+} from "@/lib/ustad-client";
 import { useSettings, saveProfilePatch } from "@/lib/settings-store";
+import { useIdentityLanguage } from "@/lib/identity-language";
+import { errorText, identityText } from "@/lib/identity-spec";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { crorepatiProfileStatsFn, crorepatiEntryProfileStatsFn } from "@/lib/crorepati.functions";
 import { walletPanelFn } from "@/lib/wallet.functions";
 import {
@@ -126,7 +136,9 @@ function SettingsPage() {
             <PwaInstallCard />
           </TabsContent>
           <TabsContent value="data" className="mt-4">
-            <DataPanel token={token} guestId={session?.guestId ?? ""} />
+            <div className="panel space-y-4 p-5">
+              <IdentityDataActions token={token} guestId={session?.guestId ?? ""} />
+            </div>
           </TabsContent>
           <TabsContent value="gallery" className="mt-4">
             {ready ? <GallerySection /> : null}
@@ -800,7 +812,133 @@ function PrefsPanel() {
   );
 }
 
-function DataPanel({ token, guestId }: { token: string; guestId: string }) {
+/**
+ * Settings → Data.
+ *
+ * This is the ONE place for the three identity/data actions, all localized
+ * through the existing Settings language (never a second language system):
+ *
+ *   LOG OUT      — revokes the session server-side. The permanent Guest ID,
+ *                  username, password hash and every piece of data stay on the
+ *                  server. Next open → Welcome. Logout is NOT account deletion.
+ *   CLEAR CACHE  — temporary client files only. Identity and permanent data are
+ *                  guarded out of the action, so the next open goes Home.
+ *   CLEAR DATA   — destructive LOCAL action, gated behind a confirmation
+ *                  dialog. Clears this device's local data only; the server
+ *                  account survives and can be reconnected with Backup ID.
+ *                  Clear Data is NOT account deletion.
+ *
+ * The pre-existing server-side scope deletion ("Delete selected") is kept
+ * exactly as it was, deliberately separate from the local Clear Data action.
+ */
+function IdentityDataActions({ token, guestId }: { token: string; guestId: string }) {
+  const language = useIdentityLanguage();
+  const t = identityText(language);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [busy, setBusy] = useState<"logout" | "cache" | "data" | null>(null);
+  const [username, setUsername] = useState("");
+  const { username: sessionUsername } = useGuest();
+
+  useEffect(() => {
+    // Prefer the SERVER account username; the local copy is only a cache and is
+    // never treated as the identity (§16).
+    setUsername(sessionUsername || readStoredUsername());
+  }, [guestId, sessionUsername]);
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-border bg-surface-2/40 px-3 py-2">
+        <p className="text-xs tracking-widest text-muted-foreground uppercase">{t.accountLabel}</p>
+        <p className="font-mono text-sm">{username || "—"}</p>
+        <p className="mt-1 text-xs tracking-widest text-muted-foreground uppercase">
+          {t.guestIdLabel}
+        </p>
+        <p className="font-mono text-sm">{guestId ? shortId(guestId) : "…"}</p>
+      </div>
+
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+        <Button
+          variant="outline"
+          disabled={busy !== null}
+          onClick={async () => {
+            setBusy("logout");
+            const res = await logoutIdentity();
+            setBusy(null);
+            if (res.ok) {
+              toast.success(t.loggedOut);
+              return;
+            }
+            // The server could not confirm the revocation, so the session was
+            // kept. Say so instead of pretending the user signed out (§4).
+            toast.error(errorText(res.code, language));
+          }}
+        >
+          {t.logOut}
+        </Button>
+        <Button
+          variant="secondary"
+          disabled={busy !== null}
+          onClick={() => {
+            setBusy("cache");
+            // Cache scope is the allowlist in identity-spec: identity, session
+            // and permanent data are guarded out, so the user stays signed in.
+            clearLocalCache();
+            setBusy(null);
+            toast.success(t.cacheCleared);
+          }}
+        >
+          {t.clearCache}
+        </Button>
+        <Button variant="destructive" disabled={busy !== null} onClick={() => setConfirmOpen(true)}>
+          {t.clearData}
+        </Button>
+      </div>
+
+      <dl className="space-y-1 text-xs text-muted-foreground">
+        <div className="flex gap-2">
+          <dt className="font-semibold text-foreground">{t.logOut}:</dt>
+          <dd>{t.logOutHint}</dd>
+        </div>
+        <div className="flex gap-2">
+          <dt className="font-semibold text-foreground">{t.clearCache}:</dt>
+          <dd>{t.clearCacheHint}</dd>
+        </div>
+        <div className="flex gap-2">
+          <dt className="font-semibold text-foreground">{t.clearData}:</dt>
+          <dd>{t.clearDataHint}</dd>
+        </div>
+      </dl>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        busy={busy === "data"}
+        title={t.clearDataConfirmTitle}
+        body={t.clearDataConfirmBody}
+        confirmLabel={t.confirm}
+        cancelLabel={t.cancel}
+        onCancel={() => {
+          // Cancel does nothing at all: no local data is cleared and the
+          // session stays exactly as it was.
+          setConfirmOpen(false);
+        }}
+        onConfirm={() => {
+          setBusy("data");
+          clearLocalData();
+          setBusy(null);
+          setConfirmOpen(false);
+          toast.success(t.dataCleared);
+        }}
+      />
+
+      {/* The legacy server-side per-scope deletion, unchanged. */}
+      <div className="border-t border-border pt-4">
+        <LegacyScopePanel token={token} />
+      </div>
+    </div>
+  );
+}
+
+function LegacyScopePanel({ token }: { token: string }) {
   const scopes = [
     "conversations",
     "notes",
@@ -813,14 +951,18 @@ function DataPanel({ token, guestId }: { token: string; guestId: string }) {
   ];
   const [selected, setSelected] = useState<string[]>([]);
 
+  const [confirming, setConfirming] = useState(false);
+
   return (
-    <div className="panel space-y-4 p-5">
+    <div className="space-y-3">
       <div>
-        <p className="text-xs tracking-widest text-muted-foreground uppercase">Your guest ID</p>
-        <p className="font-mono text-sm">{guestId ? shortId(guestId) : "…"}</p>
+        <p className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
+          Server data scopes
+        </p>
         <p className="mt-1 text-xs text-muted-foreground">
-          All your data is isolated to this ID. No login, no signup, nothing shared with other
-          guests.
+          Permanently delete selected server-side data for this Guest ID only. This is a separate
+          destructive action from Clear Data, and it never touches your identity, username or
+          password.
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
@@ -848,20 +990,31 @@ function DataPanel({ token, guestId }: { token: string; guestId: string }) {
             toast.success("Cache cleared");
           }}
         >
-          Clear cache
+          Clear server cache
         </Button>
         <Button
           variant="destructive"
           disabled={selected.length === 0}
-          onClick={async () => {
-            await clearDataFn({ data: { token, scopes: selected } });
-            setSelected([]);
-            toast.success("Selected data deleted");
-          }}
+          onClick={() => setConfirming(true)}
         >
           Delete selected
         </Button>
       </div>
+
+      <ConfirmDialog
+        open={confirming}
+        title="Delete selected server data?"
+        body={`These server records will be permanently deleted for this Guest ID: ${selected.join(", ")}. Your account, username and password are not affected.`}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onCancel={() => setConfirming(false)}
+        onConfirm={async () => {
+          await clearDataFn({ data: { token, scopes: selected } });
+          setSelected([]);
+          setConfirming(false);
+          toast.success("Selected data deleted");
+        }}
+      />
     </div>
   );
 }

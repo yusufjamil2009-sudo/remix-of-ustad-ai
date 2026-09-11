@@ -200,9 +200,7 @@ async function verifyAnswers(
       const verdict = String(check.verdict ?? "").toLowerCase();
       if (verdict === "reject") return;
       const fixed =
-        typeof check.correctIndex === "number" &&
-        check.correctIndex >= 0 &&
-        check.correctIndex <= 3
+        typeof check.correctIndex === "number" && check.correctIndex >= 0 && check.correctIndex <= 3
           ? Math.floor(check.correctIndex)
           : q.correctIndex;
       kept.push({ ...q, correctIndex: fixed });
@@ -212,7 +210,6 @@ async function verifyAnswers(
     return batch;
   }
 }
-
 
 /**
  * Generate exactly `count` quiz questions in ladder order.
@@ -292,7 +289,6 @@ export async function generateQuizSet(input: {
       .filter(Boolean)
       .join("\n");
 
-
     const available = await usableProviders(input.guestId);
     const decision = route({
       text: `${user} quiz generation detail`,
@@ -329,7 +325,6 @@ export async function generateQuizSet(input: {
     });
     collected.push(...verified);
   }
-
 
   if (collected.length < count) {
     throw new Error(

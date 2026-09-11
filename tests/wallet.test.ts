@@ -26,15 +26,40 @@ test("coin labels never imply real money", () => {
 });
 
 test("a purchase is allowed only with enough coins, an active item and no prior ownership", () => {
-  assert.equal(evaluatePurchase({ balance: 100000, price: 25000, alreadyOwned: false, itemActive: true }).allowed, true);
-  assert.equal(evaluatePurchase({ balance: 24999, price: 25000, alreadyOwned: false, itemActive: true }).allowed, false);
-  assert.equal(evaluatePurchase({ balance: 25000, price: 25000, alreadyOwned: false, itemActive: true }).allowed, true);
-  assert.equal(evaluatePurchase({ balance: 999999, price: 25000, alreadyOwned: true, itemActive: true }).allowed, false);
-  assert.equal(evaluatePurchase({ balance: 999999, price: 25000, alreadyOwned: false, itemActive: false }).allowed, false);
+  assert.equal(
+    evaluatePurchase({ balance: 100000, price: 25000, alreadyOwned: false, itemActive: true })
+      .allowed,
+    true,
+  );
+  assert.equal(
+    evaluatePurchase({ balance: 24999, price: 25000, alreadyOwned: false, itemActive: true })
+      .allowed,
+    false,
+  );
+  assert.equal(
+    evaluatePurchase({ balance: 25000, price: 25000, alreadyOwned: false, itemActive: true })
+      .allowed,
+    true,
+  );
+  assert.equal(
+    evaluatePurchase({ balance: 999999, price: 25000, alreadyOwned: true, itemActive: true })
+      .allowed,
+    false,
+  );
+  assert.equal(
+    evaluatePurchase({ balance: 999999, price: 25000, alreadyOwned: false, itemActive: false })
+      .allowed,
+    false,
+  );
 });
 
 test("the shortfall message states exactly how many more coins are needed", () => {
-  const r = evaluatePurchase({ balance: 10000, price: 25000, alreadyOwned: false, itemActive: true });
+  const r = evaluatePurchase({
+    balance: 10000,
+    price: 25000,
+    alreadyOwned: false,
+    itemActive: true,
+  });
   assert.equal(r.allowed, false);
   assert.match(r.reason, /15,000 USTAD Coins/);
 });
@@ -56,7 +81,11 @@ test("coin amounts reject the classic tampering shapes", () => {
   assert.equal(isValidCoinAmount(1.5), false, "fractional coins do not exist");
   assert.equal(isValidCoinAmount(Number.NaN), false);
   assert.equal(isValidCoinAmount(Number.POSITIVE_INFINITY), false);
-  assert.equal(isValidCoinAmount(MAX_SINGLE_TRANSACTION + 1), false, "absurd magnitudes are rejected");
+  assert.equal(
+    isValidCoinAmount(MAX_SINGLE_TRANSACTION + 1),
+    false,
+    "absurd magnitudes are rejected",
+  );
   assert.equal(isValidCoinAmount("10000" as unknown), false, "a string is not an amount");
   assert.equal(isValidCoinAmount(null as unknown), false);
 });

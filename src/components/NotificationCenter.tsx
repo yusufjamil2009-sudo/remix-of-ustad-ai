@@ -124,7 +124,10 @@ export function NotificationCenter() {
       window.removeEventListener("focus", onFocus);
       window.removeEventListener("ustad:notifications-changed", onFocus);
     };
-  }, [refreshUnread]);
+    // `ready` gates the effect body, so it belongs in the dependency array:
+    // when the session becomes ready the poll starts, and on teardown the
+    // interval/listeners are removed (no loop — refreshUnread never sets ready).
+  }, [ready, refreshUnread]);
 
   /* ---------------- feed ---------------- */
 

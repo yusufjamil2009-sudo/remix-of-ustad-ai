@@ -39,12 +39,17 @@ const server = http.createServer(async (req, res) => {
       const token = Math.random().toString(36).slice(2);
       SIGNED.set(token, path);
       res.writeHead(200, { "content-type": "application/json" });
-      return res.end(JSON.stringify({ signedURL: `/storage/v1/object/sign/${path}?token=${token}` }));
+      return res.end(
+        JSON.stringify({ signedURL: `/storage/v1/object/sign/${path}?token=${token}` }),
+      );
     }
     if (rest.startsWith("object/")) {
       const path = rest.slice("object/".length);
       if (req.method === "POST" || req.method === "PUT") {
-        STORAGE.set(path, { bytes: body, contentType: req.headers["content-type"] ?? "application/octet-stream" });
+        STORAGE.set(path, {
+          bytes: body,
+          contentType: req.headers["content-type"] ?? "application/octet-stream",
+        });
         res.writeHead(200, { "content-type": "application/json" });
         return res.end(JSON.stringify({ Key: path }));
       }

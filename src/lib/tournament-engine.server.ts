@@ -272,7 +272,9 @@ export async function tournamentState(input: {
 
   const lastCompleted = cycleAttempts
     .filter((a) => String(a["status"]) === "completed")
-    .sort((a, b) => String(b["completed_at"] ?? "").localeCompare(String(a["completed_at"] ?? "")))[0];
+    .sort((a, b) =>
+      String(b["completed_at"] ?? "").localeCompare(String(a["completed_at"] ?? "")),
+    )[0];
 
   return {
     kind: input.kind,
@@ -448,16 +450,17 @@ export async function startTournament(input: {
 async function refundAndCancel(guestId: string, attempt: Row, hadTicket: boolean) {
   const attemptId = String(attempt["id"]);
   try {
-    if (attempt["entry_txn_id"] || true) {
-      await applyCoins({
-        guestId,
-        source: "tournament_refund",
-        refId: attemptId,
-        amount: Number(attempt["entry_amount"] ?? 0),
-        type: "refund",
-        note: "Tournament could not start — entry refunded",
-      }).catch(() => null);
-    }
+    // Entry refund for every cancelled attempt. Older attempts may not carry an
+    // entry_txn_id, so the refund is intentionally unconditional (pre-existing
+    // behaviour preserved — the previous `entry_txn_id || true` was always true).
+    await applyCoins({
+      guestId,
+      source: "tournament_refund",
+      refId: attemptId,
+      amount: Number(attempt["entry_amount"] ?? 0),
+      type: "refund",
+      note: "Tournament could not start — entry refunded",
+    }).catch(() => null);
     if (hadTicket) {
       await sdb().rpc("ustad_ticket_grant", { p_guest_id: guestId, p_amount: 1 });
     }
@@ -486,8 +489,7 @@ export async function answerTournament(input: {
   const attempt = (aData as Row) ?? null;
   if (!attempt) throw new Error("Tournament attempt not found.");
   const kind = String(attempt["kind"]) as TournamentKind;
-  if (String(attempt["status"]) !== "active")
-    return tournamentState({ token: input.token, kind });
+  if (String(attempt["status"]) !== "active") return tournamentState({ token: input.token, kind });
 
   const { data: qData } = await sdb()
     .from(QUESTIONS)
@@ -515,10 +517,7 @@ export async function answerTournament(input: {
 
   const rows = await questionsOf(input.attemptId);
   const answered = rows.filter((r) => r["selected_index"] !== null);
-  await sdb()
-    .from(ATTEMPTS)
-    .update({ current_index: answered.length })
-    .eq("id", input.attemptId);
+  await sdb().from(ATTEMPTS).update({ current_index: answered.length }).eq("id", input.attemptId);
 
   if (answered.length >= rows.length && rows.length > 0) {
     await finalize(guestId, { ...attempt, current_index: answered.length }, rows);
@@ -611,7 +610,6 @@ async function finalize(guestId: string, attempt: Row, rows: Row[]) {
   await notifyGuest(guestId, "tournament_won", `tournament_result:${attemptId}`, {
     eventName: cfg.title,
     amount: cfg.winReward,
-
   }).catch(() => null);
 }
 
@@ -677,7 +675,8 @@ export async function tournamentLeaderboard(input: {
       displayName: `Player ${g.slice(-4).toUpperCase()}`,
       wins: v.wins,
       bestCorrect: v.best,
-      title: input.kind === "god" ? godTitleFor(v.wins) : v.wins > 0 ? "Mystery Winner" : "Investigator",
+      title:
+        input.kind === "god" ? godTitleFor(v.wins) : v.wins > 0 ? "Mystery Winner" : "Investigator",
       isSelf: g === guestId,
     }));
 }

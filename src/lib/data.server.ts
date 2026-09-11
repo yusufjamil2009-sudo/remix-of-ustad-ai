@@ -1,36 +1,206 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /** All guest-scoped data operations. Every query is filtered by the verified guest id. */
-import { requireGuest, db, ensureGuestRow, newGuestId, issueToken } from "./guest.server";
+import { requireGuest, db, ensureGuestRow } from "./guest.server";
 import { stripProtectedFields } from "./strip-protected";
 
 export { stripProtectedFields } from "./strip-protected";
 
-export async function bootstrapGuest(token?: string) {
-  const { readGuestCookie, writeGuestCookie } = await import("./guest.server");
-  let guestId = token ? await safeVerify(token) : null;
-  if (!guestId) guestId = await safeVerify((await readGuestCookie()) ?? "");
-  let issued = token ?? "";
-  if (!guestId) {
-    guestId = newGuestId();
-    issued = await issueToken(guestId);
-  } else {
-    issued = await issueToken(guestId);
+/**
+ * Resolve the current session WITHOUT EVER CREATING A GUEST.
+ *
+ * CHANGED BEHAVIOUR (permanent identity spec §7): this used to mint a brand-new
+ * Guest ID whenever the stored token was missing or invalid. That silently
+ * abandoned a real account (and its coins, chats, cups and certificates) the
+ * moment a token went stale. It now returns `needsIdentity: true` instead, and
+ * the app shows the Welcome screen so the USER decides: create a new Guest ID
+ * or restore an existing one with Backup ID.
+ *
+ * Only an explicit user action (NEW GUEST ID / BACKUP ID / secure this device)
+ * can establish or reconnect an identity, and those live in `identity.functions`.
+ */
+export type BootstrapResult =
+  | {
+      needsIdentity: true;
+      identity: "no_identity" | "invalid_session";
+      guestId: null;
+      token: "";
+      profile: null;
+      settings: null;
+      cookieSet: false;
+      hasExistingGuest: false;
+      hasAccount: false;
+      username: null;
+    }
+  | {
+      needsIdentity: false;
+      identity: "authenticated";
+      guestId: string;
+      token: string;
+      profile: any;
+      settings: any;
+      cookieSet: boolean;
+      hasExistingGuest: true;
+      /** True when this guest already holds a username/password (account row). */
+      hasAccount: boolean;
+      /** Server-authoritative display username (null for an unclaimed guest). */
+      username: string | null;
+    };
+
+export async function bootstrapGuest(token?: string): Promise<BootstrapResult> {
+  const {
+    readGuestCookie,
+    writeGuestCookie,
+    verifySession,
+    issueSessionToken,
+    refreshSessionToken,
+    sessionIsRevoked,
+  } = await import("./guest.server");
+
+  const candidate = token && token.includes(".") ? token : ((await readGuestCookie()) ?? "");
+  const session = await verifySession(candidate);
+
+  // §6: a session row must EXIST and be ACTIVE. "missing" is its own verdict
+  // (a token pointing at nothing is invalid, never active); a DATABASE failure
+  // throws network below so the stored identity is preserved (§25).
+  if (!session) {
+    return {
+      needsIdentity: true,
+      identity: "no_identity",
+      guestId: null,
+      token: "",
+      profile: null,
+      settings: null,
+      cookieSet: false,
+      hasExistingGuest: false,
+      hasAccount: false,
+      username: null,
+    };
   }
-  await ensureGuestRow(guestId);
+
+  if (session.jti) {
+    const state = await sessionIsRevoked(session.jti);
+    if (state === "revoked" || state === "missing") {
+      return {
+        needsIdentity: true,
+        identity: "invalid_session",
+        guestId: null,
+        token: "",
+        profile: null,
+        settings: null,
+        cookieSet: false,
+        hasExistingGuest: false,
+        hasAccount: false,
+        username: null,
+      };
+    }
+  }
+
+  const { data: guest, error: guestError } = await db()
+    .from("guests")
+    .select("id")
+    .eq("id", session.guestId)
+    .maybeSingle();
+  if (guestError) {
+    // DATABASE OUTAGE, not an unknown user (§20, §22). Throwing keeps the whole
+    // client identity intact and surfaces a retryable error instead of dropping
+    // the user into Welcome and inviting them to create a second identity.
+    throw new Error("network");
+  }
+  if (!guest) {
+    return {
+      needsIdentity: true,
+      identity: "invalid_session",
+      guestId: null,
+      token: "",
+      profile: null,
+      settings: null,
+      cookieSet: false,
+      hasExistingGuest: false,
+      hasAccount: false,
+      username: null,
+    };
+  }
+
+  // Re-issue a session token for the SAME guest (identity is never regenerated
+  // here) and keep the guest's last-seen marker fresh.
+  //
+  //   • 4-part tokens already carry a live session id → the SAME jti is reused,
+  //     so LOG OUT still revokes the one session this device holds.
+  //   • legacy 2/3-part tokens predate revocation (§5) → they are safely
+  //     MIGRATED: a new revocable session row is created and a 4-part token is
+  //     returned. The Guest ID never changes and no data is touched, so the user
+  //     simply gains logout/revocation support on their next open.
+  //
+  // If the session row cannot be written we must NOT report an authenticated
+  // session (that token could never be revoked) — the caller treats this as a
+  // transient failure and keeps the user's existing identity intact.
+  let issued: string;
+  try {
+    // Same jti refresh (verified by the RPC) or legacy→revocable migration.
+    issued = session.jti
+      ? await refreshSessionToken(session.guestId, session.jti)
+      : await issueSessionToken(session.guestId);
+    await ensureGuestRow(session.guestId);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e ?? "");
+    if (msg.includes("session_unavailable")) {
+      // §7: the session row is genuinely missing/revoked → the token is dead.
+      // The stored token is cleared (client) and the USER decides on Welcome.
+      return {
+        needsIdentity: true,
+        identity: "invalid_session",
+        guestId: null,
+        token: "",
+        profile: null,
+        settings: null,
+        cookieSet: false,
+        hasExistingGuest: false,
+        hasAccount: false,
+        username: null,
+      };
+    }
+    // §3 / §25: any DATABASE/transport failure must NEVER read as "new user".
+    // The caller keeps the stored identity and surfaces a retryable error.
+    throw new Error("network");
+  }
   const cookieSet = await writeGuestCookie(issued);
+  // Does this guest still need its ONE-TIME identity setup? A guest that
+  // predates this feature keeps its data and is simply asked to add a username
+  // and password — no new Guest ID is ever created for it.
+  let hasAccount = false;
+  let username: string | null = null;
+  try {
+    const { data: acct } = await db()
+      .from("ustad_accounts")
+      .select("guest_id,username")
+      .eq("guest_id", session.guestId)
+      .maybeSingle();
+    hasAccount = Boolean(acct);
+    // The SERVER account is the authority for the display username (§16); the
+    // local copy is only a cache and is refreshed from here on every open.
+    username = (acct?.["username"] as string | undefined) ?? null;
+  } catch {
+    hasAccount = false;
+    username = null;
+  }
+
   const client = db();
   const [{ data: profile }, { data: settings }] = await Promise.all([
-    client.from("profiles").select("*").eq("guest_id", guestId).maybeSingle(),
-    client.from("settings").select("*").eq("guest_id", guestId).maybeSingle(),
+    client.from("profiles").select("*").eq("guest_id", session.guestId).maybeSingle(),
+    client.from("settings").select("*").eq("guest_id", session.guestId).maybeSingle(),
   ]);
-  return { guestId, token: issued, profile, settings, cookieSet };
-}
-
-async function safeVerify(token: string) {
-  const { verifyToken } = await import("./guest.server");
-  const id = await verifyToken(token);
-  if (!id) return null;
-  return id;
+  return {
+    needsIdentity: false,
+    identity: "authenticated",
+    guestId: session.guestId,
+    token: issued,
+    profile,
+    settings,
+    cookieSet,
+    hasExistingGuest: true,
+    hasAccount,
+    username,
+  };
 }
 
 /* ---------- conversations ---------- */

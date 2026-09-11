@@ -23,13 +23,7 @@ import { formatIndianCoins, stringsFor, type TournamentKind } from "@/lib/tourna
 type State = Awaited<ReturnType<typeof tournamentStateFn>>;
 type Ranks = Awaited<ReturnType<typeof tournamentLeaderboardFn>>;
 
-export function TournamentBoard({
-  kind,
-  intro,
-}: {
-  kind: TournamentKind;
-  intro: string;
-}) {
+export function TournamentBoard({ kind, intro }: { kind: TournamentKind; intro: string }) {
   const { token } = useGuest();
   const [state, setState] = useState<State | null>(null);
   const [ranks, setRanks] = useState<Ranks>([]);
@@ -114,13 +108,33 @@ export function TournamentBoard({
           <>
             {/* ---- Wallet / entry summary ---- */}
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Stat icon={<Coins className="size-4 text-amber-400" />} label={t.balance} value={`🪙 ${formatIndianCoins(state.balance)}`} />
-              <Stat icon={<Sparkles className="size-4 text-primary" />} label={t.entryFee} value={`🪙 ${formatIndianCoins(state.entryFee)}`} />
-              <Stat icon={<Trophy className="size-4 text-amber-300" />} label={t.reward} value={`🪙 ${formatIndianCoins(state.winReward)}`} />
+              <Stat
+                icon={<Coins className="size-4 text-amber-400" />}
+                label={t.balance}
+                value={`🪙 ${formatIndianCoins(state.balance)}`}
+              />
+              <Stat
+                icon={<Sparkles className="size-4 text-primary" />}
+                label={t.entryFee}
+                value={`🪙 ${formatIndianCoins(state.entryFee)}`}
+              />
+              <Stat
+                icon={<Trophy className="size-4 text-amber-300" />}
+                label={t.reward}
+                value={`🪙 ${formatIndianCoins(state.winReward)}`}
+              />
               {state.requiresTicket ? (
-                <Stat icon={<Ticket className="size-4 text-emerald-300" />} label={t.tickets} value={String(state.tickets)} />
+                <Stat
+                  icon={<Ticket className="size-4 text-emerald-300" />}
+                  label={t.tickets}
+                  value={String(state.tickets)}
+                />
               ) : (
-                <Stat icon={<ShieldCheck className="size-4 text-emerald-300" />} label="Status" value={state.badge} />
+                <Stat
+                  icon={<ShieldCheck className="size-4 text-emerald-300" />}
+                  label="Status"
+                  value={state.badge}
+                />
               )}
             </div>
 
@@ -129,7 +143,8 @@ export function TournamentBoard({
               <section className="rounded-2xl border border-border/60 bg-card/60 p-4 md:p-6">
                 <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
                   <span>
-                    {t.question} {question.position} / {state.attempt?.questionCount ?? state.questionCount}
+                    {t.question} {question.position} /{" "}
+                    {state.attempt?.questionCount ?? state.questionCount}
                   </span>
                   <span>{t.hiddenScore}</span>
                 </div>
@@ -193,7 +208,12 @@ export function TournamentBoard({
                       {state.questionCount} {kind === "mystery" ? "cases" : "questions"} ·{" "}
                       {state.requiredCorrect}/{state.questionCount} to win
                     </p>
-                    <Button className="mt-4" onClick={start} disabled={busy} data-testid="tournament-start">
+                    <Button
+                      className="mt-4"
+                      onClick={start}
+                      disabled={busy}
+                      data-testid="tournament-start"
+                    >
                       {busy ? <Loader2 className="mr-2 size-4 animate-spin" aria-hidden /> : null}
                       {busy ? t.starting : t.start}
                     </Button>
@@ -226,9 +246,7 @@ export function TournamentBoard({
                 </h2>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {result.correctCount}/{result.questionCount} · {result.requiredCorrect} needed
-                  {result.coinsAwarded
-                    ? ` · 🪙 ${formatIndianCoins(result.coinsAwarded)}`
-                    : ""}
+                  {result.coinsAwarded ? ` · 🪙 ${formatIndianCoins(result.coinsAwarded)}` : ""}
                 </p>
                 {result.certificateUrl ? (
                   <p className="mt-2 text-sm">
