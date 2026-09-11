@@ -443,6 +443,33 @@ export function NotificationCenter() {
               ))}
             </div>
 
+            {/* REAL browser/system notification switch (additional channel) */}
+            <div className="shrink-0 border-b border-border px-4 py-2">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs font-medium">🌐 {bnText["label"]}</span>
+                <button
+                  type="button"
+                  data-testid="browser-notify-toggle"
+                  data-on={bnEnabled ? "1" : "0"}
+                  aria-pressed={bnEnabled}
+                  onClick={() => void toggleBrowserNotifications()}
+                  className={`rounded-full px-3 py-1 text-[11px] font-semibold transition-colors ${
+                    bnEnabled
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-sidebar-accent/50 text-muted-foreground"
+                  }`}
+                >
+                  {bnEnabled ? bnText["on"] : bnText["off"]}
+                </button>
+              </div>
+              {bnNote ? (
+                <p data-testid="browser-notify-note" className="mt-1 text-[11px] text-destructive">
+                  {bnNote}
+                </p>
+              ) : null}
+            </div>
+
+
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
               {/* UPCOMING (spec §22, §40) */}
               {filter === "all" || filter === "events" ? (
