@@ -68,9 +68,12 @@ function guessTz(): string {
     return "";
   }
 }
+/** Guests whose timezone was already pushed to the server in this tab. */
+const tzSaved = new Set<string>();
 
 /** Guest-scoped settings with optimistic update + durable persistence. */
 export function useSettings() {
+
   const [settings, setSettings] = useState<UstadSettings | null>(null);
   const [saving, setSaving] = useState(false);
 
