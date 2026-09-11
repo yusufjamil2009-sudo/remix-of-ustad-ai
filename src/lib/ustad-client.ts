@@ -324,8 +324,12 @@ async function createIdentityOnce(
   username: string,
   password: string,
 ): Promise<IdentityActionResult> {
+  // A previous transient failure must not keep the error notice on screen while
+  // the user is actively trying again.
+  publish({ error: null, transient: false });
   try {
     const res = (await createGuestAccountFn({ data: { username, password } })) as unknown as
+
       | { ok: true; session: { guestId: string; token: string; username: string } }
       | { ok: false; code: IdentityErrorCode };
     if (!res.ok) return { ok: false, code: res.code };
