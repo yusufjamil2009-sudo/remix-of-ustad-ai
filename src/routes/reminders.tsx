@@ -8,6 +8,14 @@ import { Input } from "@/components/ui/input";
 import { useGuest } from "@/lib/ustad-client";
 import { listRowsFn, insertRowFn, updateRowFn, deleteRowFn } from "@/lib/ustad-api";
 import { parseWhen, formatWhen, detectRepeat } from "@/lib/chronos";
+import {
+  BN_TEXT,
+  browserNotifySupported,
+  browserPermission,
+  claimDelivery,
+  requestBrowserPermission,
+  showBrowserNotification,
+} from "@/lib/browser-notify";
 
 export const Route = createFileRoute("/reminders")({
   head: () => ({
@@ -34,14 +42,24 @@ type Reminder = {
   id: string;
   title: string;
   due_at: string;
-  status: string;
+  done?: boolean;
+  status?: string;
+  notified_at?: string | null;
   repeat_rule: string;
+  /** Existing free-form column; the browser-notification switch lives here. */
+  payload?: Record<string, unknown> | null;
 };
 
+const isDone = (r: Reminder) => Boolean(r.done) || r.status === "done";
+/** Per-reminder browser notification preference (persisted in the DB row). */
+const wantsBrowser = (r: Reminder) => Boolean(r.payload?.["browser_notify"]);
+
 function RemindersPage() {
-  const { token } = useGuest();
+  const { token, guestId } = useGuest();
   const [items, setItems] = useState<Reminder[]>([]);
   const [text, setText] = useState("");
+  const [bnNote, setBnNote] = useState<string | null>(null);
+  const bnText = BN_TEXT.hinglish;
 
   const refresh = async () => {
     if (!token) return;
@@ -57,16 +75,37 @@ function RemindersPage() {
     const timer = setInterval(() => {
       const now = Date.now();
       items
-        .filter((r) => r.status !== "done" && new Date(r.due_at).getTime() <= now)
+        .filter((r) => !isDone(r) && !r.notified_at && new Date(r.due_at).getTime() <= now)
         .forEach((r) => {
+          // Existing in-app reminder behaviour — unchanged.
           toast(`⏰ ${r.title}`, { description: formatWhen(r.due_at) });
+          // NEW: additional REAL system notification, only when this reminder
+          // has browser notification ON and the browser granted permission.
+          if (
+            wantsBrowser(r) &&
+            guestId &&
+            browserPermission() === "granted" &&
+            claimDelivery(guestId, `reminder:${r.id}:${r.due_at}`)
+          ) {
+            void showBrowserNotification({
+              tag: `ustad-reminder-${r.id}`,
+              title: `⏰ ${r.title}`,
+              body: formatWhen(r.due_at),
+              path: "/reminders",
+            });
+          }
           void updateRowFn({
-            data: { token, table: "reminders", id: r.id, patch: { status: "fired" } },
-          });
+            data: {
+              token,
+              table: "reminders",
+              id: r.id,
+              patch: { notified_at: new Date().toISOString() },
+            },
+          }).catch(() => {});
         });
     }, 30000);
     return () => clearInterval(timer);
-  }, [items, token]);
+  }, [items, token, guestId]);
 
   const add = async () => {
     const when = parseWhen(text);
@@ -92,6 +131,32 @@ function RemindersPage() {
     toast.success(`Set for ${formatWhen(when.date)}`);
   };
 
+  /** ON asks for the REAL browser permission; OFF only clears this one flag. */
+  const toggleBrowser = async (r: Reminder) => {
+    setBnNote(null);
+    const next = !wantsBrowser(r);
+    if (next) {
+      if (!browserNotifySupported()) {
+        setBnNote(bnText["unsupported"] ?? null);
+        return;
+      }
+      const status = await requestBrowserPermission();
+      if (status !== "ok") {
+        setBnNote((status === "denied" ? bnText["denied"] : bnText["topLevel"]) ?? null);
+        return;
+      }
+    }
+    await updateRowFn({
+      data: {
+        token,
+        table: "reminders",
+        id: r.id,
+        patch: { payload: { ...(r.payload ?? {}), browser_notify: next } },
+      },
+    });
+    await refresh();
+  };
+
   return (
     <AppShell>
       <PageHeader title="Reminders" subtitle="Natural language, Hinglish friendly." />
@@ -108,18 +173,35 @@ function RemindersPage() {
               <Plus className="size-4" />
             </Button>
           </div>
+          {bnNote ? (
+            <p data-testid="reminder-browser-note" className="text-xs text-destructive">
+              {bnNote}
+            </p>
+          ) : null}
           {items.map((r) => (
             <div key={r.id} className="panel flex items-center justify-between gap-3 p-3">
               <div>
-                <p
-                  className={`text-sm ${r.status === "done" ? "text-muted-foreground line-through" : ""}`}
-                >
+                <p className={`text-sm ${isDone(r) ? "text-muted-foreground line-through" : ""}`}>
                   {r.title}
                 </p>
                 <p className="flex items-center gap-1 text-xs text-muted-foreground">
                   <BellRing className="size-3" /> {formatWhen(r.due_at)}
                   {r.repeat_rule && r.repeat_rule !== "none" ? ` · ${r.repeat_rule}` : ""}
                 </p>
+                <button
+                  type="button"
+                  data-testid={`reminder-browser-${r.id}`}
+                  data-on={wantsBrowser(r) ? "1" : "0"}
+                  aria-pressed={wantsBrowser(r)}
+                  onClick={() => void toggleBrowser(r)}
+                  className={`mt-2 rounded-full px-2 py-0.5 text-[11px] font-semibold transition-colors ${
+                    wantsBrowser(r)
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-sidebar-accent/50 text-muted-foreground"
+                  }`}
+                >
+                  🌐 {bnText["label"]} [ {wantsBrowser(r) ? bnText["on"] : bnText["off"]} ]
+                </button>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -129,14 +211,14 @@ function RemindersPage() {
                         token,
                         table: "reminders",
                         id: r.id,
-                        patch: { status: r.status === "done" ? "pending" : "done" },
+                        patch: { done: !isDone(r) },
                       },
                     });
                     await refresh();
                   }}
                 >
                   <Check
-                    className={`size-4 ${r.status === "done" ? "text-success" : "text-muted-foreground"}`}
+                    className={`size-4 ${isDone(r) ? "text-success" : "text-muted-foreground"}`}
                   />
                 </button>
                 <button
