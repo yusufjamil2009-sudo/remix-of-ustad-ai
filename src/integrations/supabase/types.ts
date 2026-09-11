@@ -3420,6 +3420,56 @@ export type Database = {
         }
         Relationships: []
       }
+      ustad_accounts: {
+        Row: {
+          created_at: string
+          failed_attempts: number
+          guest_id: string
+          last_login_at: string | null
+          locked_until: string | null
+          password_algo: string
+          password_hash: string
+          updated_at: string
+          user_id: string
+          username: string
+          username_normalized: string
+        }
+        Insert: {
+          created_at?: string
+          failed_attempts?: number
+          guest_id: string
+          last_login_at?: string | null
+          locked_until?: string | null
+          password_algo?: string
+          password_hash: string
+          updated_at?: string
+          user_id?: string
+          username: string
+          username_normalized: string
+        }
+        Update: {
+          created_at?: string
+          failed_attempts?: number
+          guest_id?: string
+          last_login_at?: string | null
+          locked_until?: string | null
+          password_algo?: string
+          password_hash?: string
+          updated_at?: string
+          user_id?: string
+          username?: string
+          username_normalized?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ustad_accounts_guest_id_fkey"
+            columns: ["guest_id"]
+            isOneToOne: true
+            referencedRelation: "guests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ustad_achievements: {
         Row: {
           awarded_at: string
@@ -3765,6 +3815,27 @@ export type Database = {
           },
         ]
       }
+      ustad_login_attempts: {
+        Row: {
+          created_at: string
+          id: string
+          outcome: string
+          username_normalized: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          outcome?: string
+          username_normalized?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          outcome?: string
+          username_normalized?: string
+        }
+        Relationships: []
+      }
       ustad_notifications: {
         Row: {
           action_path: string
@@ -3962,6 +4033,41 @@ export type Database = {
           summary?: Json
         }
         Relationships: []
+      }
+      ustad_sessions: {
+        Row: {
+          expires_at: string
+          guest_id: string
+          issued_at: string
+          jti: string
+          revoked_at: string | null
+          revoked_reason: string
+        }
+        Insert: {
+          expires_at: string
+          guest_id: string
+          issued_at?: string
+          jti: string
+          revoked_at?: string | null
+          revoked_reason?: string
+        }
+        Update: {
+          expires_at?: string
+          guest_id?: string
+          issued_at?: string
+          jti?: string
+          revoked_at?: string | null
+          revoked_reason?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ustad_sessions_guest_id_fkey"
+            columns: ["guest_id"]
+            isOneToOne: false
+            referencedRelation: "guests"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       ustad_shop_items: {
         Row: {
@@ -4167,6 +4273,39 @@ export type Database = {
           balance_after: number
           balance_before: number
           transaction_id: string
+        }[]
+      }
+      ustad_create_guest_account: {
+        Args: {
+          p_guest_id: string
+          p_password_hash: string
+          p_username: string
+          p_username_normalized: string
+        }
+        Returns: {
+          guest_id: string
+          jti: string
+          user_id: string
+          username: string
+        }[]
+      }
+      ustad_issue_fresh_session: {
+        Args: { p_guest_id: string }
+        Returns: {
+          jti: string
+        }[]
+      }
+      ustad_refresh_session: {
+        Args: { p_guest_id: string; p_jti: string }
+        Returns: {
+          jti: string
+        }[]
+      }
+      ustad_revoke_session: {
+        Args: { p_jti: string; p_reason: string }
+        Returns: {
+          jti: string
+          revoked_at: string
         }[]
       }
       ustad_shop_buy: {
