@@ -65,7 +65,7 @@ export function CoinOfferBanner({ token }: { token: string }) {
   useEffect(() => {
     if (!token) return;
     let alive = true;
-    (async () => {
+    const load = async () => {
       try {
         const res = await coinOfferBannerFn({ data: { token } });
         if (alive) setState(res);
@@ -74,9 +74,14 @@ export function CoinOfferBanner({ token }: { token: string }) {
       } finally {
         if (alive) setChecked(true);
       }
-    })();
+    };
+    void load();
+    // The offer flips from "coming soon" to "live" on a schedule, so the banner
+    // re-reads the server state every 60 seconds instead of going stale.
+    const id = window.setInterval(() => void load(), 60000);
     return () => {
       alive = false;
+      window.clearInterval(id);
     };
   }, [token]);
 
