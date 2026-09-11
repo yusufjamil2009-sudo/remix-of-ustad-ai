@@ -25,7 +25,9 @@ export const coinOfferBannerFn = createServerFn({ method: "POST" })
     if (!off) return { available: false, reason: "no_offer", language: locale.language };
 
     const live = offer.isOfferLive(off, now);
-    if (live) await offer.offerNotificationsForGuest(guestId).catch(() => {});
+    // The server decides WHICH notification fits this offer right now — live or
+    // "coming soon" — and both are idempotent per guest per offer id.
+    await offer.offerNotificationsForGuest(guestId).catch(() => {});
 
     return {
       available: true,
