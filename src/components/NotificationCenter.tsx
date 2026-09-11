@@ -95,7 +95,7 @@ export function NotificationCenter() {
   const navigate = useNavigate();
   // The guest session is the single source of truth for the token. Calling any
   // notification function before it is ready throws "Invalid guest session".
-  const { token, ready } = useGuest();
+  const { token, ready, guestId } = useGuest();
   const [open, setOpen] = useState(false);
   const [unread, setUnread] = useState(0);
   const [items, setItems] = useState<FeedItem[]>([]);
