@@ -445,11 +445,27 @@ async function adoptSession(guestId: string, token: string, username: string) {
     identity:
       "state" in status && status.state === "authenticated" ? "authenticated" : "no_identity",
   });
-  const session = await bootstrap(token);
+  // A THROWN bootstrap here used to leave `status: "initializing"` forever —
+  // the app then sat on the splash with no way out. A failure is transient by
+  // contract, so publish a retryable error state and keep the stored token.
+  let session: GuestSession;
+  try {
+    session = await bootstrap(token);
+  } catch (e) {
+    const kind = classifyClientFailure(e as Error);
+    publish({
+      status: "error",
+      error: ERROR_TEXT.english[kind],
+      identity: "invalid_session",
+      transient: true,
+    });
+    throw e;
+  }
   const display = serverUsername || (session.guestId ? username : "");
   if (display && session.guestId) writeToken(token, session.guestId, display);
   publish({ username: display });
 }
+
 
 /* ---------------- multi-tab identity sync (§21) ---------------- */
 
