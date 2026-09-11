@@ -120,8 +120,13 @@ export function CoinOfferBanner({ token }: { token: string }) {
           <Flame className="size-5" />
         </span>
         <div>
-          <p className={state.live ? "text-sm font-bold text-amber-600" : "text-sm font-bold"}>
-            {t.offerLiveTitle}
+          <p
+            data-testid="coin-offer-title"
+            data-live={state.live ? "1" : "0"}
+            className={state.live ? "text-sm font-bold text-amber-600" : "text-sm font-bold"}
+          >
+            {/* An upcoming offer must NOT be headlined as LIVE. */}
+            {state.live ? t.offerLiveTitle : t.offerComingTitle}
             <span className="font-semibold"> — {pct}% OFF</span>
           </p>
           <p className="text-xs text-muted-foreground">{state.live ? liveBody : comingBody}</p>
