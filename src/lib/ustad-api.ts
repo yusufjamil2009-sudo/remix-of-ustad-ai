@@ -19,13 +19,22 @@ type ServerFn = (arg: never) => Promise<unknown>;
 function wrap<F extends ServerFn>(fn: F): F {
   const call = async (arg: Payload = {}) => {
     const data = { ...(arg.data ?? {}) };
-    data["token"] = await currentToken();
+    const token = await currentToken();
+    // No identity yet (Welcome screen): calling the server would fail with
+    // "Invalid guest session", which would trigger a recovery + re-bootstrap and
+    // publish a new snapshot — remounting the callers and starting the whole
+    // cycle again. Fail locally instead: no request, no recovery, no loop.
+    if (!token) throw new Error("NO_GUEST_SESSION");
+    data["token"] = token;
     try {
       return await (fn as unknown as (a: Payload) => Promise<unknown>)({ ...arg, data });
     } catch (e) {
       const msg = (e as Error)?.message ?? "";
       if (!RECOVERABLE.test(msg)) throw e;
       const session = await recoverGuest(true);
+      // The re-handshake produced no identity — retrying would fail identically
+      // and each attempt republishes the snapshot, so stop here.
+      if (!session.token) throw e;
       return (fn as unknown as (a: Payload) => Promise<unknown>)({
         ...arg,
         data: { ...data, token: session.token },
@@ -34,6 +43,7 @@ function wrap<F extends ServerFn>(fn: F): F {
   };
   return call as unknown as F;
 }
+
 
 export const listConversationsFn = wrap(fns.listConversationsFn);
 export const createConversationFn = wrap(fns.createConversationFn);
