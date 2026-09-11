@@ -175,15 +175,21 @@ export function IdentityScreen() {
         </div>
 
         <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+          {/* A transient/network failure is only a NOTICE: it must never take
+              the setup form away, or a single failed call would leave the user
+              unable to create a Guest ID at all. */}
           {networkError ? (
-            <div className="flex flex-col gap-3">
+            <div className="mb-4 flex flex-col gap-2 rounded-xl border border-destructive/40 bg-destructive/5 p-3">
               <p role="alert" className="text-sm text-destructive">
                 {ERROR_TEXT[language]["network"]}
               </p>
               <p className="text-xs text-muted-foreground">{ERROR_TEXT[language]["session"]}</p>
-              <Button onClick={() => void retryIdentity()}>{t.back}</Button>
+              <Button size="sm" variant="outline" onClick={() => void retryIdentity()}>
+                {t.back}
+              </Button>
             </div>
-          ) : mode === "choose" ? (
+          ) : null}
+          {mode === "choose" ? (
             <div className="flex flex-col gap-3">
               <Button size="lg" onClick={() => setMode("new")}>
                 {t.newGuest}
@@ -221,12 +227,13 @@ export function IdentityScreen() {
             />
           )}
 
-          {!networkError && error ? (
+          {error ? (
             <p role="alert" className="mt-3 text-sm text-destructive">
               {error}
             </p>
           ) : null}
         </div>
+
       </div>
     </div>
   );
