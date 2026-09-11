@@ -81,9 +81,11 @@ export function useSettings() {
         if (!alive) return;
         const next = normalize(s.settings, readMirror(s.guestId));
         setSettings(next);
+        if (!s.guestId) return; // no identity yet (Welcome screen): nothing to persist
         writeMirror(s.guestId, next);
-        // make sure the detected timezone is stored server-side once
-        if (!s.settings?.["timezone"] && next.timezone) {
+        // make sure the detected timezone is stored server-side once per guest
+        if (!s.settings?.["timezone"] && next.timezone && !tzSaved.has(s.guestId)) {
+          tzSaved.add(s.guestId);
           void saveSettingsFn({
             data: { token: s.token, patch: { timezone: next.timezone } },
           }).catch(() => {});
@@ -94,6 +96,7 @@ export function useSettings() {
       alive = false;
     };
   }, []);
+
 
   const update = useCallback(async (patch: Partial<UstadSettings>) => {
     const guestId = getSnapshot().session?.guestId ?? "";
