@@ -32,6 +32,18 @@ import {
   type NotificationType,
 } from "@/lib/notification-spec";
 import { useGuest } from "@/lib/ustad-client";
+import {
+  BN_TEXT,
+  browserNotifySupported,
+  browserPermission,
+  claimDelivery,
+  getBrowserNotifyEnabled,
+  requestBrowserPermission,
+  seedDelivered,
+  setBrowserNotifyEnabled,
+  showBrowserNotification,
+  type BnLanguage,
+} from "@/lib/browser-notify";
 
 type FeedItem = {
   id: string;
@@ -83,7 +95,7 @@ export function NotificationCenter() {
   const navigate = useNavigate();
   // The guest session is the single source of truth for the token. Calling any
   // notification function before it is ready throws "Invalid guest session".
-  const { token, ready } = useGuest();
+  const { token, ready, guestId } = useGuest();
   const [open, setOpen] = useState(false);
   const [unread, setUnread] = useState(0);
   const [items, setItems] = useState<FeedItem[]>([]);
@@ -128,6 +140,94 @@ export function NotificationCenter() {
     // when the session becomes ready the poll starts, and on teardown the
     // interval/listeners are removed (no loop — refreshUnread never sets ready).
   }, [ready, refreshUnread]);
+
+  /* -------- REAL browser/system notifications (additional channel) --------
+   * The existing in-app notification system stays the source of truth; every
+   * unread notification it produced is simply MIRRORED to the operating system
+   * once, when the guest has switched this on and the browser granted
+   * permission. Nothing here creates or hides an in-app notification. */
+
+  const [bnEnabled, setBnEnabled] = useState(false);
+  const [bnNote, setBnNote] = useState<string | null>(null);
+  const bnText = BN_TEXT[language as BnLanguage] ?? BN_TEXT.english;
+
+  useEffect(() => {
+    if (!guestId) return;
+    setBnEnabled(getBrowserNotifyEnabled(guestId) && browserPermission() === "granted");
+  }, [guestId]);
+
+  const deliverPending = useCallback(async () => {
+    if (!ready || !guestId) return;
+    if (!getBrowserNotifyEnabled(guestId) || browserPermission() !== "granted") return;
+    try {
+      const r = (await notificationFeedFn({
+        data: { token, filter: "unread", cursor: null },
+      })) as { items: FeedItem[] };
+      // Oldest first so the newest system notification ends up on top.
+      const pending = [...(r.items ?? [])].reverse();
+      for (const n of pending) {
+        // claimDelivery is the idempotency gate: one notification id can only
+        // ever produce ONE system notification, even across reloads.
+        if (!claimDelivery(guestId, n.id)) continue;
+        await showBrowserNotification({
+          tag: `ustad-notification-${n.id}`,
+          title: n.title,
+          body: n.message,
+          path: `/notifications/${n.id}`,
+        });
+      }
+    } catch {
+      /* delivery is best-effort and never affects the in-app feed */
+    }
+  }, [ready, guestId, token]);
+
+  useEffect(() => {
+    if (!bnEnabled || !ready) return;
+    void deliverPending();
+    const id = window.setInterval(() => void deliverPending(), UNREAD_POLL_MS);
+    const onChanged = () => void deliverPending();
+    window.addEventListener("ustad:notifications-changed", onChanged);
+    window.addEventListener("focus", onChanged);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener("ustad:notifications-changed", onChanged);
+      window.removeEventListener("focus", onChanged);
+    };
+  }, [bnEnabled, ready, deliverPending]);
+
+  const toggleBrowserNotifications = async () => {
+    if (!guestId) return;
+    setBnNote(null);
+    if (bnEnabled) {
+      setBrowserNotifyEnabled(guestId, false);
+      setBnEnabled(false);
+      return;
+    }
+    if (!browserNotifySupported()) {
+      setBnNote(bnText["unsupported"] ?? null);
+      return;
+    }
+    const status = await requestBrowserPermission();
+    if (status !== "ok") {
+      setBnNote((status === "denied" ? bnText["denied"] : bnText["topLevel"]) ?? null);
+      return;
+    }
+    // Enabling must not dump the whole existing backlog into the OS: mark what
+    // already exists as delivered, then only NEW notifications ring.
+    try {
+      const r = (await notificationFeedFn({
+        data: { token, filter: "unread", cursor: null },
+      })) as { items: FeedItem[] };
+      seedDelivered(
+        guestId,
+        (r.items ?? []).map((n) => n.id),
+      );
+    } catch {
+      /* ignore */
+    }
+    setBrowserNotifyEnabled(guestId, true);
+    setBnEnabled(true);
+  };
 
   /* ---------------- feed ---------------- */
 
@@ -342,6 +442,33 @@ export function NotificationCenter() {
                 </button>
               ))}
             </div>
+
+            {/* REAL browser/system notification switch (additional channel) */}
+            <div className="shrink-0 border-b border-border px-4 py-2">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs font-medium">🌐 {bnText["label"]}</span>
+                <button
+                  type="button"
+                  data-testid="browser-notify-toggle"
+                  data-on={bnEnabled ? "1" : "0"}
+                  aria-pressed={bnEnabled}
+                  onClick={() => void toggleBrowserNotifications()}
+                  className={`rounded-full px-3 py-1 text-[11px] font-semibold transition-colors ${
+                    bnEnabled
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-sidebar-accent/50 text-muted-foreground"
+                  }`}
+                >
+                  {bnEnabled ? bnText["on"] : bnText["off"]}
+                </button>
+              </div>
+              {bnNote ? (
+                <p data-testid="browser-notify-note" className="mt-1 text-[11px] text-destructive">
+                  {bnNote}
+                </p>
+              ) : null}
+            </div>
+
 
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
               {/* UPCOMING (spec §22, §40) */}
