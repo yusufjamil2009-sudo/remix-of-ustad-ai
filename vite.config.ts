@@ -65,6 +65,9 @@ export default defineConfig({
           ],
         },
         workbox: {
+          // Real system-notification click handling lives in /notify-sw.js and
+          // is folded into this ONE generated service worker.
+          importScripts: ["/notify-sw.js"],
           globPatterns: ["**/*.{js,css,html,png,svg,webmanifest,woff2}"],
           maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
           cleanupOutdatedCaches: true,
