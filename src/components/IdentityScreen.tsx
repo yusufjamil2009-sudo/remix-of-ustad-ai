@@ -234,7 +234,6 @@ export function IdentityScreen() {
           ) : null}
         </div>
 
-        </div>
       </div>
     </div>
   );
