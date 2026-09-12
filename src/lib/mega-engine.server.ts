@@ -884,6 +884,20 @@ export async function submitAnswer(input: {
   const delta = correct ? scoring.correct : scoring.wrong;
 
   // Insert-only: the composite PK makes a second submission impossible.
+  // Check if already answered to provide better error handling
+  const { data: existingAnswer } = await sdb()
+    .from("mega_match_answers")
+    .select("id")
+    .eq("match_id", input.matchId)
+    .eq("question_number", input.questionNumber)
+    .eq("guest_id", guestId)
+    .maybeSingle();
+  
+  if (existingAnswer) {
+    // Already answered — the answer stays locked, nothing is scored twice.
+    return buildMatchView(match, event, guestId);
+  }
+
   const { error } = await sdb().from("mega_match_answers").insert({
     match_id: input.matchId,
     question_number: input.questionNumber,
@@ -908,13 +922,21 @@ export async function submitAnswer(input: {
     .eq("guest_id", guestId)
     .maybeSingle();
 
+  if (!player) throw new Error("Player not found in match.");
+
+  // Only update if the answer was actually inserted (not a duplicate)
+  const currentCorrect = Number(player?.["correct_count"] ?? 0);
+  const currentWrong = Number(player?.["wrong_count"] ?? 0);
+  const currentScore = Number(player?.["score"] ?? 0);
+  const currentResponseMs = Number(player?.["total_response_ms"] ?? 0);
+
   await sdb()
     .from("mega_match_players")
     .update({
-      correct_count: Number(player?.["correct_count"] ?? 0) + (correct ? 1 : 0),
-      wrong_count: Number(player?.["wrong_count"] ?? 0) + (correct ? 0 : 1),
-      score: Number(player?.["score"] ?? 0) + delta,
-      total_response_ms: Number(player?.["total_response_ms"] ?? 0) + responseMs,
+      correct_count: currentCorrect + (correct ? 1 : 0),
+      wrong_count: currentWrong + (correct ? 0 : 1),
+      score: currentScore + delta,
+      total_response_ms: currentResponseMs + responseMs,
       last_seen_at: new Date().toISOString(),
     })
     .eq("match_id", input.matchId)

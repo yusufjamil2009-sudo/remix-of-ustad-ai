@@ -491,6 +491,14 @@ export async function answerTournament(input: {
   const kind = String(attempt["kind"]) as TournamentKind;
   if (String(attempt["status"]) !== "active") return tournamentState({ token: input.token, kind });
 
+  // Validate that we're answering the expected question (prevent stale/out-of-order submissions)
+  const currentIndex = Number(attempt["current_index"] ?? 0);
+  const expectedPosition = currentIndex + 1;
+  if (input.position !== expectedPosition) {
+    // Already moved past this question or answering out of order
+    return tournamentState({ token: input.token, kind });
+  }
+
   const { data: qData } = await sdb()
     .from(QUESTIONS)
     .select("*")
@@ -501,10 +509,11 @@ export async function answerTournament(input: {
   if (!question) throw new Error("Question not found.");
 
   // Anti-cheat: an answer is locked once and never re-scored.
+  // Also prevent duplicate submissions for the same question
   if (question["selected_index"] === null) {
     const chosen = Math.max(0, Math.min(3, Math.floor(Number(input.optionIndex))));
     const correct = chosen === Number(question["correct_index"]);
-    await sdb()
+    const { data: claimed } = await sdb()
       .from(QUESTIONS)
       .update({
         selected_index: chosen,
@@ -512,12 +521,22 @@ export async function answerTournament(input: {
         answered_at: new Date().toISOString(),
       })
       .eq("id", question["id"])
-      .is("selected_index", null);
+      .is("selected_index", null)
+      .select()
+      .maybeSingle();
+    if (!claimed) {
+      // Another request already answered this question
+      return tournamentState({ token: input.token, kind });
+    }
+  } else {
+    // Question already answered - prevent duplicate scoring
+    return tournamentState({ token: input.token, kind });
   }
 
   const rows = await questionsOf(input.attemptId);
   const answered = rows.filter((r) => r["selected_index"] !== null);
-  await sdb().from(ATTEMPTS).update({ current_index: answered.length }).eq("id", input.attemptId);
+  const nextIndex = answered.length;
+  await sdb().from(ATTEMPTS).update({ current_index: nextIndex }).eq("id", input.attemptId);
 
   if (answered.length >= rows.length && rows.length > 0) {
     await finalize(guestId, { ...attempt, current_index: answered.length }, rows);
