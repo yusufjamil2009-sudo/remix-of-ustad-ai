@@ -3,9 +3,9 @@ alter table public.crorepati_events
   add column if not exists max_free_entries integer not null default 3,
   add column if not exists missed_threshold integer not null default 10,
   add column if not exists schedule_weekdays jsonb not null default '[0,2,5]'::jsonb,
-  add column if not exists open_hour integer not null default 18,
+  add column if not exists open_hour integer not null default 6,
   add column if not exists open_minute integer not null default 0,
-  add column if not exists window_minutes integer not null default 240,
+  add column if not exists window_minutes integer not null default 960,
   add column if not exists entry_timezone text not null default 'Asia/Kolkata',
   add column if not exists paid_entry_coin_cost bigint not null default 100000,
   add column if not exists paid_entry_enabled boolean not null default true;

@@ -131,9 +131,9 @@ async function syncOccurrences(event: Row): Promise<void> {
     fromMs: now - 120 * 86_400_000,
     toMs: now + 7 * 86_400_000,
     weekdays: cfg.scheduleWeekdays,
-    openHour: Number(event["open_hour"] ?? 18),
+    openHour: Number(event["open_hour"] ?? 6),
     openMinute: Number(event["open_minute"] ?? 0),
-    windowMinutes: Number(event["window_minutes"] ?? 240),
+    windowMinutes: Number(event["window_minutes"] ?? 960),
     timezone: cfg.timezone,
   });
   if (!planned.length) return;

@@ -1032,16 +1032,41 @@ export async function submitAnswer(input: {
   const q = await questionRow(String(attempt["id"]), input.questionNumber);
   if (!q) throw new Error("Question not found.");
 
+  // Auto-transition from QUESTION_INTRO to ANSWERING if the pre-timer has elapsed.
+  // This handles cases where the client hasn't called beginQuestion yet but the
+  // pre-timer has already passed on the server clock.
+  let effectiveAttempt = attempt;
+  if (String(attempt["game_state"]) === "QUESTION_INTRO") {
+    const preTimerStartsAt = attempt["answer_timer_starts_at"]
+      ? Date.parse(String(attempt["answer_timer_starts_at"]))
+      : null;
+    if (preTimerStartsAt && Date.now() >= preTimerStartsAt) {
+      const answerTimerSec = Number(event["answer_timer_seconds"] ?? 90);
+      const { data: transitioned } = await sdb()
+        .from("master_event_attempts")
+        .update({
+          game_state: "ANSWERING",
+          deadline_at: new Date(Date.now() + answerTimerSec * 1000).toISOString(),
+        })
+        .eq("id", attempt["id"])
+        .eq("guest_id", guestId)
+        .eq("game_state", "QUESTION_INTRO")
+        .select()
+        .maybeSingle();
+      if (transitioned) effectiveAttempt = transitioned as Row;
+    }
+  }
+
   const verdict = checkAnswer({
     chosenIndex: input.chosenIndex,
     correctIndex: Number(q["correct_index"]),
     optionCount: ((q["options"] ?? []) as string[]).length,
     questionNumber: input.questionNumber,
-    expectedQuestionNumber: Number(attempt["current_question"]),
+    expectedQuestionNumber: Number(effectiveAttempt["current_question"]),
     alreadyAnswered: q["answered_at"] !== null && q["answered_at"] !== undefined,
-    gameState: String(attempt["game_state"]) as GameState,
+    gameState: String(effectiveAttempt["game_state"]) as GameState,
     nowMs: Date.now(),
-    deadlineMs: attempt["deadline_at"] ? Date.parse(String(attempt["deadline_at"])) : null,
+    deadlineMs: effectiveAttempt["deadline_at"] ? Date.parse(String(effectiveAttempt["deadline_at"])) : null,
   });
 
   if (!verdict.ok) {
@@ -1063,7 +1088,7 @@ export async function submitAnswer(input: {
       answered_at: new Date().toISOString(),
       was_correct: verdict.correct,
     })
-    .eq("attempt_id", attempt["id"])
+    .eq("attempt_id", effectiveAttempt["id"])
     .eq("question_number", input.questionNumber)
     .is("answered_at", null)
     .select()
@@ -1074,16 +1099,16 @@ export async function submitAnswer(input: {
       correct: Boolean(q["was_correct"]),
       correctIndex: Number(q["correct_index"]),
       explanation: String(q["explanation"] ?? ""),
-      attempt: viewAttempt(attempt, event, q),
+      attempt: viewAttempt(effectiveAttempt, event, q),
     };
   }
 
   const gameplay = (event["gameplay_config"] ?? {}) as { eliminatedOnWrong?: boolean };
-  const correctCount = Number(attempt["correct_count"] ?? 0) + (verdict.correct ? 1 : 0);
-  const wrongCount = Number(attempt["wrong_count"] ?? 0) + (verdict.correct ? 0 : 1);
-  const cleared = Number(attempt["cleared_questions"] ?? 0) + (verdict.correct ? 1 : 0);
-  const count = Number(attempt["question_count"]);
-  const nextNumber = Number(attempt["current_question"]) + 1;
+  const correctCount = Number(effectiveAttempt["correct_count"] ?? 0) + (verdict.correct ? 1 : 0);
+  const wrongCount = Number(effectiveAttempt["wrong_count"] ?? 0) + (verdict.correct ? 0 : 1);
+  const cleared = Number(effectiveAttempt["cleared_questions"] ?? 0) + (verdict.correct ? 1 : 0);
+  const count = Number(effectiveAttempt["question_count"]);
+  const nextNumber = Number(effectiveAttempt["current_question"]) + 1;
 
   const eliminated = Boolean(gameplay.eliminatedOnWrong) && !verdict.correct;
   const finished = eliminated || nextNumber > count;
@@ -1105,11 +1130,13 @@ export async function submitAnswer(input: {
       start + Number(event["answer_timer_seconds"] ?? 90) * 1000,
     ).toISOString();
   }
+  // Update attempt reference after potential auto-transition
+  attempt = effectiveAttempt;
 
   const { data: updated } = await sdb()
     .from("master_event_attempts")
     .update(patch)
-    .eq("id", attempt["id"])
+    .eq("id", effectiveAttempt["id"])
     .eq("guest_id", guestId)
     .select()
     .single();
