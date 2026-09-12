@@ -747,8 +747,8 @@ function ResultPanel({
             an entry.
           </li>
           <li>
-            Event days: Sunday, Tuesday and Friday — open 3:00 AM to 11:00 PM, and exactly one game
-            per event day.
+            Event days: Sunday, Tuesday and Friday — open 6:00 AM to 10:00 PM IST, and exactly one
+            game per event day.
           </li>
           <li>Prize board runs from ₹20,000 at Q1 up to ₹10 crore at Q20.</li>
         </ul>
