@@ -44,6 +44,8 @@ import {
   insertRowFn,
   transcribeFn,
 } from "@/lib/ustad-api";
+import { hasDeviceAi, runDeviceText } from "@/lib/browser-ai";
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
