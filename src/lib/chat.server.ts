@@ -93,12 +93,21 @@ export async function sendMessage(input: {
   attachmentIds?: string[] | undefined;
   clientNow?: string | undefined;
   timeZone?: string | undefined;
+  /** Browser AI routing: build and return the prompt only, answer nothing. */
+  plan?: boolean | undefined;
+  /** Browser AI routing: a validated answer already produced on the device. */
+  deviceText?: string | undefined;
+  /** Which on-device model produced `deviceText` (shown in the status line). */
+  deviceEngine?: string | undefined;
 }): Promise<SendResult> {
   const guestId = await requireGuest(input.token);
   const client = db();
   const text = input.text.trim();
   const attachmentIds = input.attachmentIds ?? [];
+  const planOnly = input.plan === true;
+  const deviceText = (input.deviceText ?? "").trim();
   if (!text && attachmentIds.length === 0) throw new Error("Message is empty.");
+
 
   /* conversation */
   let conversationId = input.conversationId;
