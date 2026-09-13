@@ -489,10 +489,53 @@ export async function sendMessage(input: {
     messages.push({ role: "user", content: userText });
   }
 
+  /* BROWSER AI ROUTING — plan mode stops here and hands the fully built prompt
+   * to the on-device model pool. Nothing is answered or persisted yet. */
+  if (planOnly) {
+    return {
+      conversationId,
+      userMessage: null,
+      assistantMessage: null,
+      plan: {
+        system: sys,
+        messages: messages.map((m) => ({
+          role: m.role,
+          content: typeof m.content === "string" ? m.content : userText,
+        })),
+        maxTokens: decision.maxTokens,
+      },
+      status: {
+        intent: decision.intent,
+        complexity: decision.complexity,
+        language: decision.language,
+        provider: "browser-ai",
+        model: "pending",
+        fallbackUsed: false,
+        sources,
+        showSources,
+        truncated: false,
+        continuations: 0,
+      },
+    };
+  }
+
   let result: Awaited<ReturnType<typeof runChat>>;
-  try {
-    result = await runChat({ candidates, messages, maxTokens: decision.maxTokens });
-  } catch (e) {
+  if (deviceText) {
+    /* The device answer was already validated on the client (non-empty,
+     * complete, not cut off). No provider call is made. */
+    result = {
+      text: deviceText,
+      provider: "browser-ai",
+      model: input.deviceEngine || "on-device",
+      attempts: [],
+      truncated: false,
+      continuations: 0,
+    };
+  } else
+    try {
+      result = await runChat({ candidates, messages, maxTokens: decision.maxTokens });
+    } catch (e) {
+
     // A chrono question is fully computed locally, so it must still be answerable
     // when every AI provider is unavailable.
     if (!chrono?.handled) throw e;
