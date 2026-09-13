@@ -253,8 +253,18 @@ export async function generateQuizSet(input: {
   let provider = "";
   let model = "";
 
-  for (let round = 0; round < 7 && collected.length < count; round++) {
-    const need = count - collected.length;
+  /*
+   * Questions are asked for in SMALL BATCHES instead of one big request: a
+   * single large response can be cut off by the provider's output limit, which
+   * used to leave the set incomplete. Each response now stays comfortably
+   * small, and the loop keeps requesting until the full set exists.
+   */
+  const BATCH = 5;
+  const maxRounds = Math.ceil(count / BATCH) * 3 + 4;
+
+  for (let round = 0; round < maxRounds && collected.length < count; round++) {
+    const need = Math.min(BATCH, count - collected.length);
+
     const avoidList = [...input.avoid.slice(-40), ...collected.map((q) => q.question)]
       .slice(-60)
       .map((q) => `- ${q.slice(0, 100)}`)
