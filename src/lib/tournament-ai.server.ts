@@ -323,13 +323,16 @@ export async function generateTournamentSet(input: {
     provider = res.provider;
     model = res.model;
 
-    let parsed: { cases?: Raw[]; questions?: Raw[] } | Raw[];
+    let rows: Raw[] = [];
     try {
-      parsed = parseJsonLoose<{ cases?: Raw[]; questions?: Raw[] } | Raw[]>(res.text);
+      const parsed = parseJsonLoose<{ cases?: Raw[]; questions?: Raw[] } | Raw[]>(res.text);
+      rows = Array.isArray(parsed) ? parsed : (parsed.cases ?? parsed.questions ?? []);
     } catch {
-      continue;
+      // Truncated response: salvage the complete cases and re-request the rest.
+      rows = salvageJsonObjects(res.text) as Raw[];
     }
-    const rows = Array.isArray(parsed) ? parsed : (parsed.cases ?? parsed.questions ?? []);
+    if (!rows.length) continue;
+
     const cleaned = clean(input.kind, rows, seen);
     const verified = await verify(cleaned, { guestId: input.guestId, language: input.language });
     collected.push(...verified);
