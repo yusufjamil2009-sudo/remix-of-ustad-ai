@@ -52,6 +52,61 @@ export function parseJsonLoose<T>(raw: string): T {
   }
 }
 
+/**
+ * Salvage every COMPLETE top-level JSON object from a possibly TRUNCATED AI
+ * response (a response cut off mid-array leaves valid objects before the cut).
+ *
+ * Used only as a fallback after `parseJsonLoose` fails: it never fabricates a
+ * record, it only keeps objects whose braces/strings actually closed. The
+ * caller still validates every salvaged row against its own schema.
+ */
+export function salvageJsonObjects(raw: string): Record<string, unknown>[] {
+  const out: Record<string, unknown>[] = [];
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i]!;
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === "{") {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (ch === "}") {
+      depth--;
+      if (depth === 0 && start >= 0) {
+        try {
+          const value = JSON.parse(raw.slice(start, i + 1)) as unknown;
+          if (value && typeof value === "object" && !Array.isArray(value))
+            out.push(value as Record<string, unknown>);
+        } catch {
+          /* not a usable object — skip it */
+        }
+        start = -1;
+      }
+      if (depth < 0) depth = 0;
+    }
+  }
+  // A wrapper object like {"questions":[...]} also matches; unwrap its array.
+  const flattened: Record<string, unknown>[] = [];
+  for (const obj of out) {
+    const arrays = Object.values(obj).filter(Array.isArray) as unknown[][];
+    if (arrays.length === 1 && !("question" in obj) && !("prompt" in obj)) {
+      for (const item of arrays[0]!)
+        if (item && typeof item === "object" && !Array.isArray(item))
+          flattened.push(item as Record<string, unknown>);
+    } else flattened.push(obj);
+  }
+  return flattened;
+}
+
+
 function norm(text: string): string {
   // Devanagari block kept intentionally so Hindi/Devanagari questions compare alike.
   return text
