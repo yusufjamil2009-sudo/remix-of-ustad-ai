@@ -843,9 +843,19 @@ export async function startAttempt(input: {
   }
 
   const attemptId = String(created["id"]);
-  await sdb()
+  const { error: qError } = await sdb()
     .from("master_event_attempt_questions")
     .insert(questions.map((q) => ({ ...q, attempt_id: attemptId })));
+  if (qError) {
+    // Never leave a playable-looking attempt with no questions: an unplayable
+    // attempt would later be settled as a 0-correct "finished" event.
+    await sdb()
+      .from("master_event_attempts")
+      .update({ status: "abandoned", result: "abandoned", game_state: "FINISHED" })
+      .eq("id", attemptId);
+    throw new Error("Event questions could not be loaded. Please try again in a moment.");
+  }
+
   await sdb()
     .from("master_event_served_questions")
     .upsert(
