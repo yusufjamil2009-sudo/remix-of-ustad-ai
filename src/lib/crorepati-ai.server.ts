@@ -320,13 +320,17 @@ export async function generateQuizSet(input: {
     provider = res.provider;
     model = res.model;
 
-    let parsed: { questions?: RawQ[] } | RawQ[];
+    let rows: RawQ[] = [];
     try {
-      parsed = parseJsonLoose<{ questions?: RawQ[] } | RawQ[]>(res.text);
+      const parsed = parseJsonLoose<{ questions?: RawQ[] } | RawQ[]>(res.text);
+      rows = Array.isArray(parsed) ? parsed : (parsed.questions ?? []);
     } catch {
-      continue;
+      // Truncated response: keep whatever complete questions did arrive and
+      // let the next round request the rest. Never treat it as a full set.
+      rows = salvageJsonObjects(res.text) as RawQ[];
     }
-    const rows = Array.isArray(parsed) ? parsed : (parsed.questions ?? []);
+    if (!rows.length) continue;
+
     const cleaned = clean(rows, seen);
     // Fact-check pass: wrong or unverifiable answers never reach the player.
     const verified = await verifyAnswers(cleaned, {
