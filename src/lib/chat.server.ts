@@ -531,23 +531,24 @@ export async function sendMessage(input: {
       truncated: false,
       continuations: 0,
     };
-  } else
+  } else {
     try {
       result = await runChat({ candidates, messages, maxTokens: decision.maxTokens });
     } catch (e) {
-
-    // A chrono question is fully computed locally, so it must still be answerable
-    // when every AI provider is unavailable.
-    if (!chrono?.handled) throw e;
-    result = {
-      text: chrono.text,
-      provider: "chrono-engine",
-      model: "chrono",
-      attempts: [],
-      truncated: false,
-      continuations: 0,
-    };
+      // A chrono question is fully computed locally, so it must still be answerable
+      // when every AI provider is unavailable.
+      if (!chrono?.handled) throw e;
+      result = {
+        text: chrono.text,
+        provider: "chrono-engine",
+        model: "chrono",
+        attempts: [],
+        truncated: false,
+        continuations: 0,
+      };
+    }
   }
+
 
   /* memory intelligence */
   let memorySaved: string | undefined;
