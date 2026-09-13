@@ -62,8 +62,7 @@ export function parseJsonLoose<T>(raw: string): T {
  */
 export function salvageJsonObjects(raw: string): Record<string, unknown>[] {
   const out: Record<string, unknown>[] = [];
-  let depth = 0;
-  let start = -1;
+  const starts: number[] = [];
   let inString = false;
   let escaped = false;
   for (let i = 0; i < raw.length; i++) {
@@ -75,36 +74,25 @@ export function salvageJsonObjects(raw: string): Record<string, unknown>[] {
       continue;
     }
     if (ch === '"') inString = true;
-    else if (ch === "{") {
-      if (depth === 0) start = i;
-      depth++;
-    } else if (ch === "}") {
-      depth--;
-      if (depth === 0 && start >= 0) {
-        try {
-          const value = JSON.parse(raw.slice(start, i + 1)) as unknown;
-          if (value && typeof value === "object" && !Array.isArray(value))
-            out.push(value as Record<string, unknown>);
-        } catch {
-          /* not a usable object — skip it */
+    else if (ch === "{") starts.push(i);
+    else if (ch === "}") {
+      const start = starts.pop();
+      if (start === undefined) continue;
+      try {
+        const value = JSON.parse(raw.slice(start, i + 1)) as unknown;
+        if (value && typeof value === "object" && !Array.isArray(value)) {
+          const obj = value as Record<string, unknown>;
+          // Only item-shaped objects (a question/case) are useful to callers.
+          if ("question" in obj || "prompt" in obj) out.push(obj);
         }
-        start = -1;
+      } catch {
+        /* not a usable object — skip it */
       }
-      if (depth < 0) depth = 0;
     }
   }
-  // A wrapper object like {"questions":[...]} also matches; unwrap its array.
-  const flattened: Record<string, unknown>[] = [];
-  for (const obj of out) {
-    const arrays = Object.values(obj).filter(Array.isArray) as unknown[][];
-    if (arrays.length === 1 && !("question" in obj) && !("prompt" in obj)) {
-      for (const item of arrays[0]!)
-        if (item && typeof item === "object" && !Array.isArray(item))
-          flattened.push(item as Record<string, unknown>);
-    } else flattened.push(obj);
-  }
-  return flattened;
+  return out;
 }
+
 
 
 function norm(text: string): string {
