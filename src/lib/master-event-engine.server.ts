@@ -843,9 +843,19 @@ export async function startAttempt(input: {
   }
 
   const attemptId = String(created["id"]);
-  await sdb()
+  const { error: qError } = await sdb()
     .from("master_event_attempt_questions")
     .insert(questions.map((q) => ({ ...q, attempt_id: attemptId })));
+  if (qError) {
+    // Never leave a playable-looking attempt with no questions: an unplayable
+    // attempt would later be settled as a 0-correct "finished" event.
+    await sdb()
+      .from("master_event_attempts")
+      .update({ status: "abandoned", result: "abandoned", game_state: "GAME_OVER" })
+      .eq("id", attemptId);
+    throw new Error("Event questions could not be loaded. Please try again in a moment.");
+  }
+
   await sdb()
     .from("master_event_served_questions")
     .upsert(
@@ -966,8 +976,69 @@ export async function beginQuestion(input: {
   );
 }
 
+/**
+ * Self-heal an active attempt whose question rows are missing (a failed or
+ * partial question insert, or a generation that never landed). An attempt with
+ * no question to show is NOT a completed attempt: it is repaired here and the
+ * answering window is re-armed, so the player still sees Question N.
+ */
+async function repairQuestions(attempt: Row, event: Row): Promise<Row> {
+  const current = Number(attempt["current_question"] ?? 1);
+  if (await questionRow(String(attempt["id"]), current)) return attempt;
+
+  const count = Number(attempt["question_count"] ?? 0) || resolveQuestionCount(0);
+  const language = String(attempt["language"] ?? "en") as Language;
+  const questions = await buildQuestions({
+    guestId: String(attempt["guest_id"]),
+    event,
+    count,
+    language,
+  });
+
+  const { data: have } = await sdb()
+    .from("master_event_attempt_questions")
+    .select("question_number")
+    .eq("attempt_id", attempt["id"]);
+  const known = new Set(((have ?? []) as Row[]).map((r) => Number(r["question_number"])));
+  const missing = questions.filter((q) => !known.has(Number(q["question_number"])));
+  if (missing.length > 0) {
+    const { error } = await sdb()
+      .from("master_event_attempt_questions")
+      .insert(missing.map((q) => ({ ...q, attempt_id: attempt["id"] })));
+    if (error) throw new Error("Event questions are still loading. Please try again in a moment.");
+  }
+
+  // The time lost to the failure was never the player's: re-arm the window.
+  const pre = Number(event["pre_timer_seconds"] ?? 10);
+  const answerSec = Number(event["answer_timer_seconds"] ?? 90);
+  const start = Date.now() + pre * 1000;
+  const patch: Row = {
+    game_state: "QUESTION_INTRO",
+    answer_timer_starts_at: new Date(start).toISOString(),
+    deadline_at: new Date(start + answerSec * 1000).toISOString(),
+  };
+  const total = Number(event["total_timer_seconds"] ?? 0);
+  const totalDeadline = attempt["total_deadline_at"]
+    ? Date.parse(String(attempt["total_deadline_at"]))
+    : NaN;
+  if (total > 0 && Number.isFinite(totalDeadline) && Date.now() > totalDeadline) {
+    patch["total_deadline_at"] = new Date(Date.now() + total * 1000).toISOString();
+  }
+  const { data: updated } = await sdb()
+    .from("master_event_attempts")
+    .update(patch)
+    .eq("id", attempt["id"])
+    .eq("status", "active")
+    .select()
+    .maybeSingle();
+  return (updated as Row) ?? attempt;
+}
+
 async function enforceTimeout(attempt: Row, event: Row): Promise<Row> {
+  // A missing question can never expire the attempt — repair it first.
+  attempt = await repairQuestions(attempt, event);
   const now = Date.now();
+
   const deadline = attempt["deadline_at"] ? Date.parse(String(attempt["deadline_at"])) : NaN;
   const totalDeadline = attempt["total_deadline_at"]
     ? Date.parse(String(attempt["total_deadline_at"]))
