@@ -230,7 +230,31 @@ export async function sendMessage(input: {
 
   const available = await usableProviders(guestId);
 
+  /* BROWSER AI ROUTING — an image / OCR / vision turn cannot run on a
+   * text-only on-device model, so plan mode returns no plan and the caller
+   * keeps using the existing server (API Manager) path unchanged. */
+  if (planOnly && (imageRequest || ocrRequest || hasImages)) {
+    return {
+      conversationId,
+      userMessage: null,
+      assistantMessage: null,
+      status: {
+        intent: decision.intent,
+        complexity: decision.complexity,
+        language: decision.language,
+        provider: "",
+        model: "",
+        fallbackUsed: false,
+        sources: [],
+        showSources: false,
+        truncated: false,
+        continuations: 0,
+      },
+    };
+  }
+
   /* IMAGE GENERATION BRANCH — a real generated picture, saved as an attachment. */
+
   if (imageRequest) {
     const prompt = imagePromptFrom(text);
     let image: Awaited<ReturnType<typeof generateImage>>["image"];
