@@ -343,7 +343,11 @@ export async function generateTournamentSet(input: {
   let model = "";
 
   /* BROWSER AI FIRST — device batches, validated server-side. */
-  for (const raw of input.deviceBatches ?? []) {
+  const { takeDeviceBatches } = await import("./device-batches.server");
+  const deviceBatches =
+    input.deviceBatches ??
+    (await takeDeviceBatches(input.guestId, input.kind === "mystery" ? "mystery" : "god"));
+  for (const raw of deviceBatches) {
     if (collected.length >= count) break;
     let rows: Raw[] = [];
     try {
