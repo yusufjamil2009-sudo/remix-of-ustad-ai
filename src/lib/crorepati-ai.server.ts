@@ -220,7 +220,92 @@ async function verifyAnswers(
  *
  * `avoid` = question texts the guest has already seen, so sets differ.
  */
+export type QuizPromptInput = {
+  language: Language;
+  klass?: string | null | undefined;
+  avoid: string[];
+  seed: number;
+  count: number;
+  showName?: string | undefined;
+};
+
+/** Questions per request. Small batches never hit an output limit. */
+export const QUIZ_BATCH = 5;
+
+/**
+ * The single source of truth for the quiz prompts. Used by the server
+ * generation loop AND by the on-device (browser AI) plan, so a question made
+ * on the device is asked for in exactly the same words and validated by the
+ * same server-side rules.
+ */
+export function quizPromptParts(input: QuizPromptInput) {
+  const shuffledTopics = [...TOPIC_POOL].sort(
+    (a, b) => ((input.seed + a.length) % 97) - ((input.seed * 7 + b.length) % 97),
+  );
+  const schema =
+    '{"questions":[{"question":"...","options":["A","B","C","D"],"correctIndex":0,' +
+    '"difficulty":"easy|medium|hard","category":"topic","explanation":"why the answer is correct",' +
+    '"hint":"a nudge that does not directly reveal the answer"}]}';
+  const system = [
+    `You are the question master of USTAD AI's ${input.showName ?? "Kon Banega Crorepati"} quiz show.`,
+    "Return STRICT JSON only — no prose, no markdown fence, no commentary.",
+    `Schema: ${schema}`,
+  ].join(" ");
+
+  const buildUser = (need: number, round: number, alreadyAsked: string[]): string => {
+    const avoidList = [...input.avoid.slice(-40), ...alreadyAsked]
+      .slice(-60)
+      .map((q) => `- ${q.slice(0, 100)}`)
+      .join("\n");
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
+    const year = now.getUTCFullYear();
+    return [
+      `Create ${need} fresh multiple-choice quiz questions for a ${input.showName ?? "Kon Banega Crorepati"} style quiz show in India.`,
+      `Today's date is ${today}. Treat ${year} as the present year.`,
+      "Use ONLY real, verifiable general-knowledge and current-affairs facts — no invented people, places, awards, records or events.",
+      `About a quarter of the set must be current affairs: recent Indian and world news, sports results, awards, appointments, science and space milestones, economy and government schemes from ${year - 1}–${year}.`,
+      "For current-affairs questions, only use facts you are confident are still accurate; skip anything fast-changing or disputed.",
+      `Difficulty ladder for this set: questions get progressively harder. Roughly ${Math.ceil(need * 0.35)} easy, ${Math.ceil(need * 0.35)} medium, rest hard.`,
+      `Rotate across these topics so the set feels varied: ${shuffledTopics.slice(0, 8).join(", ")}.`,
+      input.klass
+        ? `The player studies in class ${input.klass}; keep questions fair for that age.`
+        : "",
+      languageRule(input.language),
+      "Every question must have exactly 4 options and exactly ONE unambiguous correct option.",
+      'Include "correctIndex" as the 0-based index of the correct option.',
+      'Include a short "hint" that guides thinking WITHOUT naming the answer.',
+      'Include a short "explanation" stating the verifiable fact behind the answer.',
+      "Questions must be factually correct, self-contained and non-repetitive.",
+      `Randomisation seed ${input.seed}-${round}: do not reuse your usual first picks; surprise the player.`,
+      avoidList
+        ? `Do NOT repeat or paraphrase any of these already-used questions:\n${avoidList}`
+        : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+  };
+
+  return { system, buildUser };
+}
+
+/** Prompts the browser AI pool must answer to build a full set on the device. */
+export function quizDevicePlan(input: QuizPromptInput): {
+  system: string;
+  batches: Array<{ user: string; need: number }>;
+} {
+  const count = Math.max(1, Math.floor(input.count));
+  const { system, buildUser } = quizPromptParts(input);
+  const batches: Array<{ user: string; need: number }> = [];
+  for (let done = 0, round = 0; done < count; done += QUIZ_BATCH, round++) {
+    const need = Math.min(QUIZ_BATCH, count - done);
+    batches.push({ user: buildUser(need, round, []), need });
+  }
+  return { system, batches };
+}
+
 export async function generateQuizSet(input: {
+
   guestId: string;
   language: Language;
   klass?: string | null;
