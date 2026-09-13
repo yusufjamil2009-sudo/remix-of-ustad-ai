@@ -73,8 +73,9 @@ export type SendResult = {
    * must answer. Absent when this turn cannot be answered on the device.
    */
   plan?:
-    | { system: string; messages: ChatMessage[]; maxTokens: number }
+    | { system: string; messages: Array<{ role: string; content: string }>; maxTokens: number }
     | undefined;
+
 
 };
 
