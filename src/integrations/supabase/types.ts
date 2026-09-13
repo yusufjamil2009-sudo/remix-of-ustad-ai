@@ -1244,6 +1244,30 @@ export type Database = {
         }
         Relationships: []
       }
+      device_ai_batches: {
+        Row: {
+          created_at: string
+          guest_id: string
+          id: string
+          raw: string
+          task: string
+        }
+        Insert: {
+          created_at?: string
+          guest_id: string
+          id?: string
+          raw: string
+          task: string
+        }
+        Update: {
+          created_at?: string
+          guest_id?: string
+          id?: string
+          raw?: string
+          task?: string
+        }
+        Relationships: []
+      }
       exam_batches: {
         Row: {
           board: string | null
