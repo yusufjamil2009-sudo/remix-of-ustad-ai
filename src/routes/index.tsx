@@ -44,6 +44,8 @@ import {
   insertRowFn,
   transcribeFn,
 } from "@/lib/ustad-api";
+import { hasDeviceAi, runDeviceText } from "@/lib/browser-ai";
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -270,16 +272,41 @@ function ChatPage() {
       },
     ]);
     try {
-      const res = await sendMessageFn({
-        data: {
-          token,
-          text,
-          ...(activeId ? { conversationId: activeId } : {}),
-          attachmentIds,
-          clientNow: new Date().toISOString(),
-          timeZone: localTimeZone(),
-        },
-      });
+      const base = {
+        token,
+        text,
+        ...(activeId ? { conversationId: activeId } : {}),
+        attachmentIds,
+        clientNow: new Date().toISOString(),
+        timeZone: localTimeZone(),
+      };
+      /* ROUTING — on-device AI models first (every compatible one, in order),
+       * and only if all of them fail the existing API Manager path runs. */
+      let res: Awaited<ReturnType<typeof sendMessageFn>>;
+      if (await hasDeviceAi()) {
+        const planned = await sendMessageFn({ data: { ...base, plan: true } });
+        const plan = planned.plan;
+        const device = plan
+          ? await runDeviceText({
+              system: plan.system,
+              user: plan.messages
+                .filter((m) => m.role !== "system")
+                .map((m) => `${m.role === "assistant" ? "ASSISTANT" : "USER"}: ${m.content}`)
+                .join("\n\n"),
+            })
+          : null;
+        if (device) setStatus(`${device.engineLabel} · answering…`);
+        res = await sendMessageFn({
+          data: {
+            ...base,
+            conversationId: planned.conversationId,
+            ...(device ? { deviceText: device.text, deviceEngine: device.engineId } : {}),
+          },
+        });
+      } else {
+        res = await sendMessageFn({ data: base });
+      }
+
       setActiveId(res.conversationId);
       const rows = (await listMessagesFn({
         data: { token, conversationId: res.conversationId },

@@ -68,6 +68,15 @@ export type SendResult = {
     /** Curriculum Brain resolution line (only when a curriculum signal was present). */
     curriculum?: string;
   };
+  /**
+   * BROWSER AI ROUTING (plan mode only): the exact prompt the on-device model
+   * must answer. Absent when this turn cannot be answered on the device.
+   */
+  plan?:
+    | { system: string; messages: Array<{ role: string; content: string }>; maxTokens: number }
+    | undefined;
+
+
 };
 
 /** The user must explicitly ask before sources are shown in the UI. */
@@ -84,12 +93,21 @@ export async function sendMessage(input: {
   attachmentIds?: string[] | undefined;
   clientNow?: string | undefined;
   timeZone?: string | undefined;
+  /** Browser AI routing: build and return the prompt only, answer nothing. */
+  plan?: boolean | undefined;
+  /** Browser AI routing: a validated answer already produced on the device. */
+  deviceText?: string | undefined;
+  /** Which on-device model produced `deviceText` (shown in the status line). */
+  deviceEngine?: string | undefined;
 }): Promise<SendResult> {
   const guestId = await requireGuest(input.token);
   const client = db();
   const text = input.text.trim();
   const attachmentIds = input.attachmentIds ?? [];
+  const planOnly = input.plan === true;
+  const deviceText = (input.deviceText ?? "").trim();
   if (!text && attachmentIds.length === 0) throw new Error("Message is empty.");
+
 
   /* conversation */
   let conversationId = input.conversationId;
@@ -212,7 +230,31 @@ export async function sendMessage(input: {
 
   const available = await usableProviders(guestId);
 
+  /* BROWSER AI ROUTING — an image / OCR / vision turn cannot run on a
+   * text-only on-device model, so plan mode returns no plan and the caller
+   * keeps using the existing server (API Manager) path unchanged. */
+  if (planOnly && (imageRequest || ocrRequest || hasImages)) {
+    return {
+      conversationId,
+      userMessage: null,
+      assistantMessage: null,
+      status: {
+        intent: decision.intent,
+        complexity: decision.complexity,
+        language: decision.language,
+        provider: "",
+        model: "",
+        fallbackUsed: false,
+        sources: [],
+        showSources: false,
+        truncated: false,
+        continuations: 0,
+      },
+    };
+  }
+
   /* IMAGE GENERATION BRANCH — a real generated picture, saved as an attachment. */
+
   if (imageRequest) {
     const prompt = imagePromptFrom(text);
     let image: Awaited<ReturnType<typeof generateImage>>["image"];
@@ -447,22 +489,66 @@ export async function sendMessage(input: {
     messages.push({ role: "user", content: userText });
   }
 
+  /* BROWSER AI ROUTING — plan mode stops here and hands the fully built prompt
+   * to the on-device model pool. Nothing is answered or persisted yet. */
+  if (planOnly) {
+    return {
+      conversationId,
+      userMessage: null,
+      assistantMessage: null,
+      plan: {
+        system: sys,
+        messages: messages.map((m) => ({
+          role: m.role,
+          content: typeof m.content === "string" ? m.content : userText,
+        })),
+        maxTokens: decision.maxTokens,
+      },
+      status: {
+        intent: decision.intent,
+        complexity: decision.complexity,
+        language: decision.language,
+        provider: "browser-ai",
+        model: "pending",
+        fallbackUsed: false,
+        sources,
+        showSources,
+        truncated: false,
+        continuations: 0,
+      },
+    };
+  }
+
   let result: Awaited<ReturnType<typeof runChat>>;
-  try {
-    result = await runChat({ candidates, messages, maxTokens: decision.maxTokens });
-  } catch (e) {
-    // A chrono question is fully computed locally, so it must still be answerable
-    // when every AI provider is unavailable.
-    if (!chrono?.handled) throw e;
+  if (deviceText) {
+    /* The device answer was already validated on the client (non-empty,
+     * complete, not cut off). No provider call is made. */
     result = {
-      text: chrono.text,
-      provider: "chrono-engine",
-      model: "chrono",
+      text: deviceText,
+      provider: "browser-ai",
+      model: input.deviceEngine || "on-device",
       attempts: [],
       truncated: false,
       continuations: 0,
     };
+  } else {
+    try {
+      result = await runChat({ candidates, messages, maxTokens: decision.maxTokens });
+    } catch (e) {
+      // A chrono question is fully computed locally, so it must still be answerable
+      // when every AI provider is unavailable.
+      if (!chrono?.handled) throw e;
+      result = {
+        text: chrono.text,
+        provider: "chrono-engine",
+        model: "chrono",
+        attempts: [],
+        truncated: false,
+        continuations: 0,
+      };
+    }
   }
+
 
   /* memory intelligence */
   let memorySaved: string | undefined;

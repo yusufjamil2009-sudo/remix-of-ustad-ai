@@ -1,3 +1,4 @@
+import { prepareDeviceQuestions } from "@/lib/device-questions";
 /**
  * KON BANEGA CROREPATI — game screen (Part 1).
  *
@@ -247,6 +248,9 @@ function CrorepatiPage() {
         typeof crypto !== "undefined" && crypto.randomUUID
           ? crypto.randomUUID()
           : String(Date.now());
+      // BROWSER AI FIRST: try to build the set on this device before the server
+      // falls back to the API Manager providers. Never blocks the start.
+      await prepareDeviceQuestions(token, "quiz", 20);
       const next = (await crorepatiStartFn({
         data: { token, idempotencyKey },
       })) as unknown as CrorepatiAttemptView;

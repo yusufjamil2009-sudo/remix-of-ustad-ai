@@ -1,3 +1,4 @@
+import { prepareDeviceQuestions } from "@/lib/device-questions";
 /**
  * Shared renderer for the two weekly tournaments (Mystery + Psychology, GOD
  * MASTER). It renders EXACTLY what the server sends: the server owns the
@@ -57,6 +58,8 @@ export function TournamentBoard({ kind, intro }: { kind: TournamentKind; intro: 
     if (!token || busy) return;
     setBusy(true);
     try {
+      // BROWSER AI FIRST: build the cases on this device when possible.
+      await prepareDeviceQuestions(token, kind === "god" ? "god" : "mystery", 20);
       const view = await tournamentStartFn({ data: { token, kind } });
       setState(view);
     } catch (err) {

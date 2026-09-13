@@ -1,3 +1,4 @@
+import { prepareDeviceQuestions } from "@/lib/device-questions";
 /**
  * USTAD EVENTS — master event hub + dynamic event player (Part 6).
  *
@@ -119,6 +120,8 @@ function EventsPage() {
       setBusy(true);
       try {
         // A stable key so a double click or a retry resumes rather than restarts.
+        // BROWSER AI FIRST: build the questions on this device when possible.
+        await prepareDeviceQuestions(token, "quiz", 10);
         const view = await masterEventStartFn({
           data: { token, code, idempotencyKey: `start:${code}:${token.slice(0, 12)}` },
         });

@@ -1,3 +1,4 @@
+import { prepareDeviceQuestions } from "@/lib/device-questions";
 /**
  * USTAD AI MEGA TOURNAMENT — lobby + match screen (Part 2).
  *
@@ -253,6 +254,8 @@ function MegaPage() {
     run(async () => {
       if (!token) return;
       presentedFor.current = "";
+      // BROWSER AI FIRST: build the questions on this device when possible.
+      await prepareDeviceQuestions(token, "quiz", 20);
       return (await megaCreateMatchFn({
         data: { token, mode, ...(mode === "multiplayer" ? { playerIds: selected } : {}) },
       })) as unknown as MegaMatchView;

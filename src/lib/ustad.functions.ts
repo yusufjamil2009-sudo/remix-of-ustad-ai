@@ -167,6 +167,9 @@ export const sendMessageFn = createServerFn({ method: "POST" })
       attachmentIds?: string[];
       clientNow?: string;
       timeZone?: string;
+      plan?: boolean;
+      deviceText?: string;
+      deviceEngine?: string;
     }) => d,
   )
   .handler(async ({ data: d }) =>
@@ -177,8 +180,12 @@ export const sendMessageFn = createServerFn({ method: "POST" })
       attachmentIds: d.attachmentIds,
       clientNow: d.clientNow,
       timeZone: d.timeZone,
+      plan: d.plan,
+      deviceText: d.deviceText,
+      deviceEngine: d.deviceEngine,
     }),
   );
+
 
 export const getProfileFn = createServerFn({ method: "POST" })
   .inputValidator((d: { token: string }) => d)
