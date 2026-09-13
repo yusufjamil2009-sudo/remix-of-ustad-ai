@@ -851,7 +851,7 @@ export async function startAttempt(input: {
     // attempt would later be settled as a 0-correct "finished" event.
     await sdb()
       .from("master_event_attempts")
-      .update({ status: "abandoned", result: "abandoned", game_state: "FINISHED" })
+      .update({ status: "abandoned", result: "abandoned", game_state: "GAME_OVER" })
       .eq("id", attemptId);
     throw new Error("Event questions could not be loaded. Please try again in a moment.");
   }
