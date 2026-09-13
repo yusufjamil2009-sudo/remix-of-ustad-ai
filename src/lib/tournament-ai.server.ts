@@ -8,7 +8,7 @@
  */
 import { usableProviders, coreCandidates } from "./api-manager.server";
 import { selectChatProviders, runChat, route, type Language } from "./router.server";
-import { parseJsonLoose } from "./exam-ai.server";
+import { parseJsonLoose, salvageJsonObjects } from "./exam-ai.server";
 import type { ChatMessage } from "./provider-clients.server";
 import type { TournamentKind } from "./tournament-spec";
 
@@ -266,8 +266,17 @@ export async function generateTournamentSet(input: {
   let provider = "";
   let model = "";
 
-  for (let round = 0; round < 7 && collected.length < count; round++) {
-    const need = count - collected.length;
+  /*
+   * SMALL BATCHES: mystery cases and GOD MASTER puzzles are long, so asking for
+   * the whole set in one response used to hit the provider's output limit and
+   * arrive truncated. Each request now covers only a few items.
+   */
+  const BATCH = mystery ? 2 : 4;
+  const maxRounds = Math.ceil(count / BATCH) * 3 + 4;
+
+  for (let round = 0; round < maxRounds && collected.length < count; round++) {
+    const need = Math.min(BATCH, count - collected.length);
+
     const avoidList = [...input.avoid.slice(-30), ...collected.map((q) => q.prompt)]
       .slice(-50)
       .map((q) => `- ${q.slice(0, 90)}`)
@@ -314,13 +323,16 @@ export async function generateTournamentSet(input: {
     provider = res.provider;
     model = res.model;
 
-    let parsed: { cases?: Raw[]; questions?: Raw[] } | Raw[];
+    let rows: Raw[] = [];
     try {
-      parsed = parseJsonLoose<{ cases?: Raw[]; questions?: Raw[] } | Raw[]>(res.text);
+      const parsed = parseJsonLoose<{ cases?: Raw[]; questions?: Raw[] } | Raw[]>(res.text);
+      rows = Array.isArray(parsed) ? parsed : (parsed.cases ?? parsed.questions ?? []);
     } catch {
-      continue;
+      // Truncated response: salvage the complete cases and re-request the rest.
+      rows = salvageJsonObjects(res.text) as Raw[];
     }
-    const rows = Array.isArray(parsed) ? parsed : (parsed.cases ?? parsed.questions ?? []);
+    if (!rows.length) continue;
+
     const cleaned = clean(input.kind, rows, seen);
     const verified = await verify(cleaned, { guestId: input.guestId, language: input.language });
     collected.push(...verified);

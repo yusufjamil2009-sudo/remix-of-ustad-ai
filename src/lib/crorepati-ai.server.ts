@@ -9,7 +9,7 @@
  */
 import { usableProviders, coreCandidates } from "./api-manager.server";
 import { selectChatProviders, runChat, route, type Language } from "./router.server";
-import { parseJsonLoose } from "./exam-ai.server";
+import { parseJsonLoose, salvageJsonObjects } from "./exam-ai.server";
 import type { ChatMessage } from "./provider-clients.server";
 import { CROREPATI_QUESTION_COUNT } from "./crorepati-spec";
 
@@ -253,8 +253,18 @@ export async function generateQuizSet(input: {
   let provider = "";
   let model = "";
 
-  for (let round = 0; round < 7 && collected.length < count; round++) {
-    const need = count - collected.length;
+  /*
+   * Questions are asked for in SMALL BATCHES instead of one big request: a
+   * single large response can be cut off by the provider's output limit, which
+   * used to leave the set incomplete. Each response now stays comfortably
+   * small, and the loop keeps requesting until the full set exists.
+   */
+  const BATCH = 5;
+  const maxRounds = Math.ceil(count / BATCH) * 3 + 4;
+
+  for (let round = 0; round < maxRounds && collected.length < count; round++) {
+    const need = Math.min(BATCH, count - collected.length);
+
     const avoidList = [...input.avoid.slice(-40), ...collected.map((q) => q.question)]
       .slice(-60)
       .map((q) => `- ${q.slice(0, 100)}`)
@@ -310,13 +320,17 @@ export async function generateQuizSet(input: {
     provider = res.provider;
     model = res.model;
 
-    let parsed: { questions?: RawQ[] } | RawQ[];
+    let rows: RawQ[] = [];
     try {
-      parsed = parseJsonLoose<{ questions?: RawQ[] } | RawQ[]>(res.text);
+      const parsed = parseJsonLoose<{ questions?: RawQ[] } | RawQ[]>(res.text);
+      rows = Array.isArray(parsed) ? parsed : (parsed.questions ?? []);
     } catch {
-      continue;
+      // Truncated response: keep whatever complete questions did arrive and
+      // let the next round request the rest. Never treat it as a full set.
+      rows = salvageJsonObjects(res.text) as RawQ[];
     }
-    const rows = Array.isArray(parsed) ? parsed : (parsed.questions ?? []);
+    if (!rows.length) continue;
+
     const cleaned = clean(rows, seen);
     // Fact-check pass: wrong or unverifiable answers never reach the player.
     const verified = await verifyAnswers(cleaned, {

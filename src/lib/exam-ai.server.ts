@@ -52,6 +52,49 @@ export function parseJsonLoose<T>(raw: string): T {
   }
 }
 
+/**
+ * Salvage every COMPLETE top-level JSON object from a possibly TRUNCATED AI
+ * response (a response cut off mid-array leaves valid objects before the cut).
+ *
+ * Used only as a fallback after `parseJsonLoose` fails: it never fabricates a
+ * record, it only keeps objects whose braces/strings actually closed. The
+ * caller still validates every salvaged row against its own schema.
+ */
+export function salvageJsonObjects(raw: string): Record<string, unknown>[] {
+  const out: Record<string, unknown>[] = [];
+  const starts: number[] = [];
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i]!;
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === "{") starts.push(i);
+    else if (ch === "}") {
+      const start = starts.pop();
+      if (start === undefined) continue;
+      try {
+        const value = JSON.parse(raw.slice(start, i + 1)) as unknown;
+        if (value && typeof value === "object" && !Array.isArray(value)) {
+          const obj = value as Record<string, unknown>;
+          // Only item-shaped objects (a question/case) are useful to callers.
+          if ("question" in obj || "prompt" in obj) out.push(obj);
+        }
+      } catch {
+        /* not a usable object — skip it */
+      }
+    }
+  }
+  return out;
+}
+
+
+
 function norm(text: string): string {
   // Devanagari block kept intentionally so Hindi/Devanagari questions compare alike.
   return text
