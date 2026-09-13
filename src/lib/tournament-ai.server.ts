@@ -266,8 +266,17 @@ export async function generateTournamentSet(input: {
   let provider = "";
   let model = "";
 
-  for (let round = 0; round < 7 && collected.length < count; round++) {
-    const need = count - collected.length;
+  /*
+   * SMALL BATCHES: mystery cases and GOD MASTER puzzles are long, so asking for
+   * the whole set in one response used to hit the provider's output limit and
+   * arrive truncated. Each request now covers only a few items.
+   */
+  const BATCH = mystery ? 2 : 4;
+  const maxRounds = Math.ceil(count / BATCH) * 3 + 4;
+
+  for (let round = 0; round < maxRounds && collected.length < count; round++) {
+    const need = Math.min(BATCH, count - collected.length);
+
     const avoidList = [...input.avoid.slice(-30), ...collected.map((q) => q.prompt)]
       .slice(-50)
       .map((q) => `- ${q.slice(0, 90)}`)
