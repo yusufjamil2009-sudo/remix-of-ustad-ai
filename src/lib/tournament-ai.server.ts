@@ -319,7 +319,6 @@ export async function generateTournamentSet(input: {
   deviceBatches?: string[] | undefined;
 }): Promise<{ items: TournamentItem[]; provider: string; model: string }> {
   const count = Math.max(1, Math.floor(input.count));
-  const mystery = input.kind === "mystery";
   const { system, buildUser } = tournamentPromptParts({
     kind: input.kind,
     language: input.language,
