@@ -9,7 +9,7 @@
  */
 import { usableProviders, coreCandidates } from "./api-manager.server";
 import { selectChatProviders, runChat, route, type Language } from "./router.server";
-import { parseJsonLoose } from "./exam-ai.server";
+import { parseJsonLoose, salvageJsonObjects } from "./exam-ai.server";
 import type { ChatMessage } from "./provider-clients.server";
 import { CROREPATI_QUESTION_COUNT } from "./crorepati-spec";
 
