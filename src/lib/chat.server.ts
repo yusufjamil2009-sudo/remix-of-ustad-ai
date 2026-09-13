@@ -68,6 +68,14 @@ export type SendResult = {
     /** Curriculum Brain resolution line (only when a curriculum signal was present). */
     curriculum?: string;
   };
+  /**
+   * BROWSER AI ROUTING (plan mode only): the exact prompt the on-device model
+   * must answer. Absent when this turn cannot be answered on the device.
+   */
+  plan?:
+    | { system: string; messages: ChatMessage[]; maxTokens: number }
+    | undefined;
+
 };
 
 /** The user must explicitly ask before sources are shown in the UI. */
