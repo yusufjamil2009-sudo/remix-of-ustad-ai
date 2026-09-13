@@ -1,3 +1,4 @@
+import { prepareDeviceQuestions } from "@/lib/device-questions";
 /**
  * Shared renderer for the two weekly tournaments (Mystery + Psychology, GOD
  * MASTER). It renders EXACTLY what the server sends: the server owns the

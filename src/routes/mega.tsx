@@ -1,3 +1,4 @@
+import { prepareDeviceQuestions } from "@/lib/device-questions";
 /**
  * USTAD AI MEGA TOURNAMENT — lobby + match screen (Part 2).
  *

@@ -1,3 +1,4 @@
+import { prepareDeviceQuestions } from "@/lib/device-questions";
 /**
  * KON BANEGA CROREPATI — game screen (Part 1).
  *

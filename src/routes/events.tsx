@@ -1,3 +1,4 @@
+import { prepareDeviceQuestions } from "@/lib/device-questions";
 /**
  * USTAD EVENTS — master event hub + dynamic event player (Part 6).
  *
