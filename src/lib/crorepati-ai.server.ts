@@ -339,7 +339,9 @@ export async function generateQuizSet(input: {
   let model = "";
 
   /* BROWSER AI FIRST — device-generated batches, validated server-side. */
-  for (const raw of input.deviceBatches ?? []) {
+  const { takeDeviceBatches } = await import("./device-batches.server");
+  const deviceBatches = input.deviceBatches ?? (await takeDeviceBatches(input.guestId, "quiz"));
+  for (const raw of deviceBatches) {
     if (collected.length >= count) break;
     let rows: RawQ[] = [];
     try {
