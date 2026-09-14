@@ -76,6 +76,9 @@ type ConfigState = {
   status: string;
   statusDetail: string | null;
   models: string[];
+  freeModels?: string[];
+  selectedModel?: string;
+  defaultModel?: string;
   latencyMs: number | null;
   filled: Record<string, unknown>;
 };
