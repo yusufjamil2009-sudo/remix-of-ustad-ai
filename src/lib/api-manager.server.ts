@@ -17,20 +17,79 @@ export async function listConfigs(token: unknown) {
     .eq("guest_id", guestId);
   if (error) throw new Error(error.message);
 
-  return PROVIDERS.map((def) => {
-    const row = (data ?? []).find((r) => r.provider === def.id);
-    const secretKeys = def.fields.filter((f) => f.secret).map((f) => f.key);
-    return {
-      provider: def.id,
-      status: row?.status ?? "not_configured",
-      statusDetail: row?.status_detail ?? null,
-      lastTestedAt: row?.last_tested_at ?? null,
-      models: (row?.models as string[]) ?? [],
-      healthy: row?.healthy ?? null,
-      latencyMs: row?.latency_ms ?? null,
-      filled: row ? maskConfig(row.config as Record<string, unknown>, secretKeys) : {},
-    };
-  });
+  return await Promise.all(
+    PROVIDERS.map(async (def) => {
+      const row = (data ?? []).find((r) => r.provider === def.id);
+      const secretKeys = def.fields.filter((f) => f.secret).map((f) => f.key);
+      const models = ((row?.models as string[]) ?? []).filter(Boolean);
+      let selectedModel = "";
+      if (row) {
+        try {
+          const cfg = await decryptConfig(row.config as Record<string, unknown>);
+          selectedModel = cfg["model"] ?? "";
+        } catch {
+          selectedModel = "";
+        }
+      }
+      // Only FREE-tier models are ever offered, best quality first.
+      const freeModels = freeModelsFor(def.id, models);
+      return {
+        provider: def.id,
+        status: row?.status ?? "not_configured",
+        statusDetail: row?.status_detail ?? null,
+        lastTestedAt: row?.last_tested_at ?? null,
+        models,
+        freeModels,
+        selectedModel,
+        defaultModel: freeModels[0] ?? "",
+        healthy: row?.healthy ?? null,
+        latencyMs: row?.latency_ms ?? null,
+        filled: row ? maskConfig(row.config as Record<string, unknown>, secretKeys) : {},
+      };
+    }),
+  );
+}
+
+/**
+ * Persist the user's model choice for a provider.
+ * `""` = Default (best active free model, resolved dynamically at call time).
+ * A paid-only / unreported model is rejected — never silently accepted.
+ */
+export async function setModel(token: unknown, provider: string, model: string) {
+  const guestId = await requireGuest(token);
+  const def = getProvider(provider);
+  if (!def) throw new Error("Unknown provider");
+
+  const { data: row } = await db()
+    .from("api_configs")
+    .select("config,models")
+    .eq("guest_id", guestId)
+    .eq("provider", provider)
+    .maybeSingle();
+  if (!row) throw new Error("This provider is not configured yet.");
+
+  const wanted = model.trim();
+  if (wanted) {
+    const live = ((row.models as string[]) ?? []).filter(Boolean);
+    if (live.length && !live.includes(wanted)) {
+      throw new Error("That model is not available on your account.");
+    }
+    if (!isFreeModel(provider, wanted)) {
+      throw new Error("Only free-tier models can be selected.");
+    }
+  }
+
+  const current = await decryptConfig(row.config as Record<string, unknown>);
+  if (wanted) current["model"] = wanted;
+  else delete current["model"];
+
+  const { error } = await db()
+    .from("api_configs")
+    .update({ config: await encryptConfig(current), updated_at: new Date().toISOString() })
+    .eq("guest_id", guestId)
+    .eq("provider", provider);
+  if (error) throw new Error(error.message);
+  return { selectedModel: wanted };
 }
 
 export async function saveConfig(token: unknown, provider: string, config: Record<string, string>) {
