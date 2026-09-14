@@ -73,6 +73,7 @@ export const listApiConfigsFn = wrap(fns.listApiConfigsFn);
 export const saveApiConfigFn = wrap(fns.saveApiConfigFn);
 export const testApiConfigFn = wrap(fns.testApiConfigFn);
 export const deleteApiConfigFn = wrap(fns.deleteApiConfigFn);
+export const setApiModelFn = wrap(fns.setApiModelFn);
 export const sendMessageFn = wrap(fns.sendMessageFn);
 export const generateExamFn = wrap(fns.generateExamFn);
 export const startStudyExamFn = wrap(fns.startStudyExamFn);
