@@ -44,6 +44,7 @@ import {
   saveApiConfigFn,
   testApiConfigFn,
   deleteApiConfigFn,
+  setApiModelFn,
   saveProfileFn,
   saveSettingsFn,
   clearCacheFn,
@@ -76,6 +77,9 @@ type ConfigState = {
   status: string;
   statusDetail: string | null;
   models: string[];
+  freeModels?: string[];
+  selectedModel?: string;
+  defaultModel?: string;
   latencyMs: number | null;
   filled: Record<string, unknown>;
 };
@@ -216,6 +220,50 @@ function ApiManager({ token }: { token: string }) {
                 <p className="text-[11px] text-muted-foreground">
                   {state.models.slice(0, 3).join(", ")}
                 </p>
+              ) : null}
+
+              {status !== "not_configured" && def.chat ? (
+                <div className="space-y-1">
+                  <Label className="text-xs">Model (free tier only)</Label>
+                  <select
+                    className="h-9 w-full rounded-md border border-border bg-surface-2 px-2 text-xs"
+                    value={state?.selectedModel ?? ""}
+                    disabled={busy === def.id}
+                    onChange={async (e) => {
+                      const model = e.target.value;
+                      setBusy(def.id);
+                      try {
+                        await setApiModelFn({ data: { token, provider: def.id, model } });
+                        toast.success(
+                          model
+                            ? `Model set to ${model}`
+                            : "Using Default — best active free model",
+                        );
+                        await refresh();
+                      } catch (err) {
+                        toast.error((err as Error).message);
+                      } finally {
+                        setBusy(null);
+                      }
+                    }}
+                  >
+                    <option value="">
+                      {state?.defaultModel
+                        ? `Default — best free model (${state.defaultModel})`
+                        : "Default — best free model"}
+                    </option>
+                    {(state?.freeModels ?? []).map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                  {!(state?.freeModels ?? []).length ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      No free-tier model detected yet — run Test to refresh the list.
+                    </p>
+                  ) : null}
+                </div>
               ) : null}
 
               {open === def.id ? (
