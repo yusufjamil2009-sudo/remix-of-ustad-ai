@@ -156,6 +156,10 @@ export const deleteApiConfigFn = createServerFn({ method: "POST" })
   .inputValidator((d: { token: string; provider: string }) => d)
   .handler(async ({ data: d }) => apiManager.deleteConfig(d.token, d.provider));
 
+export const setApiModelFn = createServerFn({ method: "POST" })
+  .inputValidator((d: { token: string; provider: string; model: string }) => d)
+  .handler(async ({ data: d }) => apiManager.setModel(d.token, d.provider, d.model));
+
 /* ---- chat ---- */
 
 export const sendMessageFn = createServerFn({ method: "POST" })
