@@ -44,6 +44,7 @@ import {
   saveApiConfigFn,
   testApiConfigFn,
   deleteApiConfigFn,
+  setApiModelFn,
   saveProfileFn,
   saveSettingsFn,
   clearCacheFn,
