@@ -5,6 +5,7 @@ import { getProvider, PROVIDERS } from "./providers";
 import { testProvider, missingFields, type TestResult } from "./provider-clients.server";
 import type { ConfiguredProvider } from "./router.server";
 import { coreKeyConfigured, USTAD_CORE_CHAT_MODEL } from "./ustad-core";
+import { freeModelsFor, isFreeModel } from "./free-models";
 
 export async function listConfigs(token: unknown) {
   const guestId = await requireGuest(token);
