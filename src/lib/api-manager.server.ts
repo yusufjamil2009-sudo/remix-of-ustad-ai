@@ -196,14 +196,21 @@ export async function usableProviders(guestId: string): Promise<ConfiguredProvid
         continue;
       }
       if (missingFields(def, config).length) continue;
-      out.push({
-        provider: row.provider,
-        config,
-        // Keep the full model list so routing can pick by MODEL capability (Bug 20),
-        // not just the first model of a provider that "has vision".
-        models: ((row.models as string[]) ?? []).filter(Boolean),
-        healthy: row.healthy,
-      });
+      // Keep the full model list so routing can pick by MODEL capability (Bug 20),
+      // not just the first model of a provider that "has vision".
+      const live = ((row.models as string[]) ?? []).filter(Boolean);
+      const selected = (config["model"] ?? "").trim();
+      let models = live;
+      if (selected && (!live.length || live.includes(selected))) {
+        // Manual selection is respected exactly — no silent substitution.
+        models = [selected];
+      } else {
+        // Default: best active FREE model first, other models kept as capability
+        // fallbacks so vision/reasoning routing never breaks.
+        const free = freeModelsFor(row.provider, live);
+        if (free.length) models = [...free, ...live.filter((m) => !free.includes(m))];
+      }
+      out.push({ provider: row.provider, config, models, healthy: row.healthy });
     } catch {
       // Never let one provider break discovery of the rest.
       continue;
