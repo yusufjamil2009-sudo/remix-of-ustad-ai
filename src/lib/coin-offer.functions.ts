@@ -30,7 +30,9 @@ export const coinOfferBannerFn = createServerFn({ method: "POST" })
     await offer.offerNotificationsForGuest(guestId).catch(() => {});
 
     return {
-      available: true,
+      // `available` is intentionally LIVE-only. Upcoming offers may still
+      // create an in-app reminder, but they never reserve banner space.
+      available: live,
       live,
       upcoming: offer.isOfferUpcoming(off, now),
       weeklyOfferId: off.weeklyOfferId,

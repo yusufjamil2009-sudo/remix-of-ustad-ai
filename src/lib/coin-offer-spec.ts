@@ -62,6 +62,12 @@ export type WeeklyOffer = {
   durationMinutes: number;
   /** Stable unique weekly-offer id: `offer:<cycleStart>:<dayOffset>:<discount>:<dur>`. */
   weeklyOfferId: string;
+  /** Persisted offers may be disabled without deleting their audit record. */
+  enabled?: boolean;
+  /** Global offers apply to every eligible coin-priced item by default. */
+  applicable?: boolean;
+  /** Persisted lifecycle status, when the database supplies one. */
+  status?: string;
 };
 
 export type OfferEligibility = {
@@ -220,8 +226,25 @@ export function offerForPreviousCycle(now: Date | string | number = new Date()):
   return generateWeeklyOffer(previousCycle(currentCycle(now)));
 }
 
+/** Validate the persisted offer fields before any UI or purchase can use them. */
+export function isValidOffer(offer: WeeklyOffer | null | undefined): boolean {
+  if (!offer || offer.enabled === false || offer.applicable === false) return false;
+  if (["disabled", "inactive", "cancelled", "expired"].includes(offer.status ?? "")) return false;
+  if (!validDiscountPct(offer.discountPct) || !validDurationMinutes(offer.durationMinutes))
+    return false;
+  const start = Date.parse(offer.startIso);
+  const end = Date.parse(offer.endIso);
+  return (
+    Number.isFinite(start) &&
+    Number.isFinite(end) &&
+    end > start &&
+    end - start === offer.durationMinutes * 60_000
+  );
+}
+
 /** True when an offer window is live for `at`. */
 export function isOfferLive(offer: WeeklyOffer, at: Date | string | number = new Date()): boolean {
+  if (!isValidOffer(offer)) return false;
   const t = new Date(at).getTime();
   return t >= Date.parse(offer.startIso) && t < Date.parse(offer.endIso);
 }
@@ -231,6 +254,7 @@ export function isOfferUpcoming(
   offer: WeeklyOffer,
   now: Date | string | number = new Date(),
 ): boolean {
+  if (!isValidOffer(offer)) return false;
   return new Date(now).getTime() < Date.parse(offer.startIso);
 }
 

@@ -94,6 +94,9 @@ function rowToWeeklyOffer(row: Row): WeeklyOffer {
     discountPct: Number(row["discount_pct"]),
     durationMinutes: Number(row["duration_minutes"]),
     weeklyOfferId: String(row["weekly_offer_id"]),
+    enabled: row["enabled"] !== false && row["is_enabled"] !== false,
+    applicable: row["applicable"] !== false && row["applies_to_all"] !== false,
+    status: String(row["status"] ?? "scheduled").toLowerCase(),
   };
 }
 
@@ -128,6 +131,11 @@ export type OfferPrice = {
 /** Real discounted price for any base coin price, or identity when no live offer. */
 export async function coinOfferPrice(basePrice: number): Promise<OfferPrice> {
   const off = await activeOffer();
+  return priceFromOffer(basePrice, off);
+}
+
+/** Apply one already-resolved offer without re-reading the database. */
+export function priceFromOffer(basePrice: number, off: WeeklyOffer | null): OfferPrice {
   if (!off || !Number.isFinite(basePrice) || basePrice <= 0) {
     return {
       offerActive: false,

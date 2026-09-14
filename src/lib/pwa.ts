@@ -182,8 +182,17 @@ export function registerServiceWorker(): void {
     return;
   }
   window.addEventListener("load", () => {
-    void navigator.serviceWorker.register(SW_URL, { scope: "/" }).catch(() => {
-      /* installability simply stays unavailable */
-    });
+    void navigator.serviceWorker
+      .register(SW_URL, { scope: "/" })
+      .then(() => {
+        window.dispatchEvent(new CustomEvent("ustad:service-worker-status", { detail: "ready" }));
+      })
+      .catch((error) => {
+        // Do not claim background notification support when registration failed.
+        // The page-level Notification fallback can still work on supported
+        // desktop browsers.
+        console.warn("[USTAD AI] Service worker registration failed", error);
+        window.dispatchEvent(new CustomEvent("ustad:service-worker-status", { detail: "failed" }));
+      });
   });
 }

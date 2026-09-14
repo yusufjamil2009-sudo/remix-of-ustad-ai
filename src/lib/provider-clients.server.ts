@@ -548,6 +548,73 @@ export async function webSearch(
   throw new Error(`Provider ${provider} does not support web search`);
 }
 
+/**
+ * Keyless live-search fallback. This is server-side so browser CORS and
+ * third-party credentials are never exposed to the client. DuckDuckGo's
+ * public HTML endpoint returns real current result links without an API key.
+ */
+export async function publicWebSearch(query: string): Promise<WebResult[]> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        accept: "text/html",
+        "user-agent": "USTAD-AI/1.0 (live web search)",
+      },
+    });
+    if (!res.ok) throw new Error(`Public web search failed (${res.status})`);
+    const html = await res.text();
+    const results: WebResult[] = [];
+    const resultPattern =
+      /<a[^>]+class="[^"]*result__a[^"]*"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?(?:<a[^>]+class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>|<div[^>]+class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/div>)/gi;
+    for (const match of html.matchAll(resultPattern)) {
+      const rawUrl = decodeHtml(String(match[1] ?? ""));
+      const resultUrl = rawUrl.startsWith("//") ? `https:${rawUrl}` : rawUrl;
+      const title = stripHtml(String(match[2] ?? ""));
+      const snippet = stripHtml(String(match[3] ?? match[4] ?? ""));
+      if (!/^https?:\/\//i.test(resultUrl) || !title || !snippet) continue;
+      const redirectTarget = resultUrl.match(/[?&]uddg=([^&]+)/)?.[1];
+      const resolvedUrl = redirectTarget ? safeDecodeURIComponent(redirectTarget) : resultUrl;
+      if (!/^https?:\/\//i.test(resolvedUrl)) continue;
+      results.push({ title, url: resolvedUrl, snippet: snippet.slice(0, 500) });
+      if (results.length === 5) break;
+    }
+    if (!results.length) throw new Error("Public web search returned no parseable results.");
+    return results;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function stripHtml(value: string): string {
+  return decodeHtml(
+    value
+      .replace(/<[^>]*>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim(),
+  );
+}
+
+function decodeHtml(value: string): string {
+  return value
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+}
+
+function safeDecodeURIComponent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 export async function readUrl(
   provider: string,
   config: Record<string, string>,

@@ -37,6 +37,7 @@ import {
   browserNotifySupported,
   browserPermission,
   claimDelivery,
+  releaseDelivery,
   getBrowserNotifyEnabled,
   requestBrowserPermission,
   seedDelivered,
@@ -169,17 +170,21 @@ export function NotificationCenter() {
         // claimDelivery is the idempotency gate: one notification id can only
         // ever produce ONE system notification, even across reloads.
         if (!claimDelivery(guestId, n.id)) continue;
-        await showBrowserNotification({
+        const shown = await showBrowserNotification({
           tag: `ustad-notification-${n.id}`,
           title: n.title,
           body: n.message,
           path: `/notifications/${n.id}`,
         });
+        if (!shown) {
+          releaseDelivery(guestId, n.id);
+          setBnNote(bnText["failed"] ?? null);
+        }
       }
     } catch {
       /* delivery is best-effort and never affects the in-app feed */
     }
-  }, [ready, guestId, token]);
+  }, [ready, guestId, token, bnText]);
 
   useEffect(() => {
     if (!bnEnabled || !ready) return;
@@ -468,7 +473,6 @@ export function NotificationCenter() {
                 </p>
               ) : null}
             </div>
-
 
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
               {/* UPCOMING (spec §22, §40) */}

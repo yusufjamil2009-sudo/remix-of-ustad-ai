@@ -65,10 +65,19 @@ export function CoinOfferBanner({ token }: { token: string }) {
   useEffect(() => {
     if (!token) return;
     let alive = true;
+    let boundaryTimer: number | undefined;
     const load = async () => {
       try {
         const res = await coinOfferBannerFn({ data: { token } });
-        if (alive) setState(res);
+        if (alive) {
+          setState(res);
+          window.clearTimeout(boundaryTimer);
+          const boundary = res.live ? res.endIso : res.startIso;
+          const ms = boundary ? Date.parse(boundary) - Date.now() + 100 : 60000;
+          // Wake exactly at the start/end boundary while retaining a slow
+          // recovery poll for clock/network failures.
+          boundaryTimer = window.setTimeout(() => void load(), Math.max(1000, Math.min(ms, 60000)));
+        }
       } catch {
         if (alive) setState(null);
       } finally {
@@ -76,16 +85,13 @@ export function CoinOfferBanner({ token }: { token: string }) {
       }
     };
     void load();
-    // The offer flips from "coming soon" to "live" on a schedule, so the banner
-    // re-reads the server state every 60 seconds instead of going stale.
-    const id = window.setInterval(() => void load(), 60000);
     return () => {
       alive = false;
-      window.clearInterval(id);
+      window.clearTimeout(boundaryTimer);
     };
   }, [token]);
 
-  if (!checked || !state?.available) return null;
+  if (!checked || !state?.available || !state.live) return null;
 
   const pct = state.discountPct ?? 0;
   const language: Language = state.language ?? "english";

@@ -13,7 +13,7 @@
  */
 import { requireGuest, db } from "./guest.server";
 import { notifyGuest } from "./notification.server";
-import { coinOfferPrice } from "./coin-offer.server";
+import { activeOffer, priceFromOffer, coinOfferPrice } from "./coin-offer.server";
 import {
   formatCoins,
   isValidCoinAmount,
@@ -237,6 +237,9 @@ export type ShopItemView = {
   name: string;
   category: string;
   price: number;
+  basePrice: number;
+  discountPct: number;
+  offerActive: boolean;
   priceLabel: string;
   description: string;
   assetReference: string;
@@ -256,6 +259,7 @@ export type ShopView = {
 export async function getShop(token: unknown): Promise<ShopView> {
   const guestId = await requireGuest(token);
   const wallet = await getWallet(guestId);
+  const liveOffer = await activeOffer().catch(() => null);
 
   const { data: itemData } = await sdb()
     .from("ustad_shop_items")
@@ -283,13 +287,18 @@ export async function getShop(token: unknown): Promise<ShopView> {
     items: items
       .filter((i) => String(i["category"]) === c.id)
       .map((i) => {
-        const price = Number(i["price_coins"] ?? 0);
+        const basePrice = Number(i["price_coins"] ?? 0);
+        const offerPrice = priceFromOffer(basePrice, liveOffer);
+        const price = offerPrice.finalPrice;
         return {
           itemId: String(i["item_id"]),
           name: String(i["name"]),
           category: String(i["category"]),
           price,
           priceLabel: formatCoins(price),
+          basePrice,
+          discountPct: offerPrice.discountPct,
+          offerActive: offerPrice.offerActive,
           description: String(i["description"] ?? ""),
           assetReference: String(i["asset_reference"] ?? ""),
           availability: String(i["availability"] ?? "permanent"),

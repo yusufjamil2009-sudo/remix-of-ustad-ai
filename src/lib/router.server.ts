@@ -3,7 +3,13 @@
  * response-length intelligence, language engine, provider/model selection,
  * fallback chain and retries.
  */
-import { chatWithProvider, webSearch, readUrl, type ChatMessage } from "./provider-clients.server";
+import {
+  chatWithProvider,
+  publicWebSearch,
+  webSearch,
+  readUrl,
+  type ChatMessage,
+} from "./provider-clients.server";
 import { getProvider } from "./providers";
 import { firstModelWith, providerCanSatisfy } from "./model-capabilities";
 import { parseCurriculumRequest } from "./curriculum/request";
@@ -547,11 +553,6 @@ export async function gatherWeb(
 
   if (decision.intent === "web" && decision.urls.length === 0) {
     const searchers = chain(available, SEARCH_CHAIN);
-    if (!searchers.length) {
-      failures.push(
-        "No web-search provider (Tavily, EXA, Jina or Firecrawl) is configured in the API Manager.",
-      );
-    }
     const cleaned = buildSearchQuery(query);
     let searched = false;
     for (const searcher of searchers) {
@@ -571,7 +572,27 @@ export async function gatherWeb(
         failures.push(`${searcher.provider}: ${(e as Error).message}`);
       }
     }
-    if (!searched && searchers.length) failures.push("Every configured search provider failed.");
+    // Configured providers always get first chance. If none is configured or
+    // all fail, use a real keyless public search rather than inventing results.
+    if (!searched) {
+      try {
+        const results = await publicWebSearch(cleaned);
+        for (const r of results) {
+          context += `\n[${r.title}] ${r.url}\n${r.snippet}\n`;
+          sources.push({ title: r.title, url: r.url });
+        }
+        searched = true;
+      } catch (e) {
+        failures.push(`Public web-search fallback: ${(e as Error).message}`);
+      }
+    }
+    if (!searched) {
+      failures.push(
+        searchers.length
+          ? "Configured search providers and the public web-search fallback failed."
+          : "No configured search provider was available and the public web-search fallback failed.",
+      );
+    }
   }
 
   const result: {

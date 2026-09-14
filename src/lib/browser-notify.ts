@@ -109,14 +109,22 @@ export function claimDelivery(guestId: string, id: string): boolean {
   if (list.includes(id)) return false;
   list.push(id);
   try {
-    window.localStorage.setItem(
-      SENT_PREFIX + guestId,
-      JSON.stringify(list.slice(-SENT_CAP)),
-    );
+    window.localStorage.setItem(SENT_PREFIX + guestId, JSON.stringify(list.slice(-SENT_CAP)));
   } catch {
     /* ignore */
   }
   return true;
+}
+
+/** Undo a claim when the OS refused delivery, so a later focus/poll can retry. */
+export function releaseDelivery(guestId: string, id: string): void {
+  if (typeof window === "undefined" || !guestId || !id) return;
+  const next = sentIds(guestId).filter((value) => value !== id);
+  try {
+    window.localStorage.setItem(SENT_PREFIX + guestId, JSON.stringify(next));
+  } catch {
+    /* ignore */
+  }
 }
 
 /**
@@ -165,7 +173,8 @@ export async function showBrowserNotification(p: BrowserNotifyPayload): Promise<
     data: { path: p.path ?? "/", tag: p.tag },
   };
   try {
-    const reg = await navigator.serviceWorker?.getRegistration?.();
+    const reg =
+      typeof navigator !== "undefined" ? await navigator.serviceWorker?.getRegistration?.() : null;
     if (reg?.showNotification) {
       await reg.showNotification(p.title, options);
       return true;
@@ -204,6 +213,7 @@ export const BN_TEXT: Record<BnLanguage, Record<string, string>> = {
     denied: "Blocked in this browser. Allow notifications in site settings.",
     unsupported: "This browser does not support notifications.",
     topLevel: "Open USTAD AI in its own tab to allow notifications.",
+    failed: "The browser could not display this notification. Check site notification settings.",
   },
   hinglish: {
     label: "Browser Notification",
@@ -212,6 +222,7 @@ export const BN_TEXT: Record<BnLanguage, Record<string, string>> = {
     denied: "Browser ne block kiya hai. Site settings me allow karein.",
     unsupported: "Is browser me notification support nahi hai.",
     topLevel: "Allow karne ke liye USTAD AI ko apne tab me kholein.",
+    failed: "Browser notification dikha nahi saka. Site notification settings check karein.",
   },
   hindi: {
     label: "ब्राउज़र सूचना",
@@ -220,5 +231,6 @@ export const BN_TEXT: Record<BnLanguage, Record<string, string>> = {
     denied: "ब्राउज़र ने रोक दिया है। साइट सेटिंग्स में अनुमति दें।",
     unsupported: "इस ब्राउज़र में सूचना समर्थित नहीं है।",
     topLevel: "अनुमति देने के लिए USTAD AI को अलग टैब में खोलें।",
+    failed: "ब्राउज़र सूचना नहीं दिखा सका। साइट की सूचना सेटिंग जाँचें।",
   },
 };

@@ -14,6 +14,7 @@ import {
   isOfferLive,
   minuteLabel,
   offerForNow,
+  isValidOffer,
 } from "../src/lib/coin-offer-spec";
 import { currentCycle, previousCycle } from "../src/lib/rank-spec";
 
@@ -32,6 +33,8 @@ test("discount and duration bounds are enforced", () => {
 });
 
 test("real discount math", () => {
+  assert.equal(discountAmount(1000, 20), 200);
+  assert.equal(offerFinalPrice(1000, 20), 800);
   // 50% OFF on 10,00,00,000 → deduct 5,00,00,000, pay 5,00,00,000.
   assert.equal(discountAmount(1000000000, 50), 500000000);
   assert.equal(offerFinalPrice(1000000000, 50), 500000000);
@@ -40,6 +43,15 @@ test("real discount math", () => {
   assert.equal(offerFinalPrice(40000000, 30), 28000000);
   // 40% OFF on 10,00,00,000 → 6,00,00,000.
   assert.equal(offerFinalPrice(100000000, 40), 60000000);
+});
+
+test("only a valid enabled offer can become active", () => {
+  const live = offerForNow("2026-09-14T05:00:00.000Z");
+  assert.equal(isValidOffer(live), true);
+  assert.equal(isValidOffer({ ...live, enabled: false }), false);
+  assert.equal(isValidOffer({ ...live, status: "expired" }), false);
+  assert.equal(isValidOffer({ ...live, discountPct: 0 }), false);
+  assert.equal(isValidOffer({ ...live, applicable: false }), false);
 });
 
 test("no fake original price inflation — discount always from the real base", () => {

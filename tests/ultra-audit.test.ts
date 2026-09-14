@@ -88,7 +88,7 @@ test("Bug #12: TTS never speaks raw LaTeX", () => {
   assert.ok(/divided by|squared/i.test(spoken));
 });
 
-test("Bug #17: gatherWeb reports honest error when no search provider is configured", async () => {
+test("Bug #17: gatherWeb uses a real keyless fallback when no search provider is configured", async () => {
   const decision = route({
     text: "What is the latest news today?",
     hasImages: false,
@@ -97,8 +97,12 @@ test("Bug #17: gatherWeb reports honest error when no search provider is configu
     webSearchEnabled: true,
   });
   const web = await gatherWeb([], decision, "What is the latest news today?");
-  assert.equal(web.sources.length, 0);
-  assert.ok(web.webError && /No web-search provider/i.test(web.webError));
+  if (web.sources.length > 0) {
+    assert.ok(web.sources.every((source) => source.title && /^https?:\/\//.test(source.url)));
+    assert.equal(web.webError, undefined);
+  } else {
+    assert.ok(web.webError && /public web-search fallback/i.test(web.webError));
+  }
 });
 
 test("Bug #13: requestId is stable for the same doubt identity", () => {
